@@ -1,0 +1,326 @@
+
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>دوربین سلفی و ارسال ایمیل</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 16px;
+  background: #202832;
+  color: white;
+  font-family: Tahoma, sans-serif;
+  text-align: center;
+}
+
+h2 { color: #ffcf40; }
+
+.box {
+  max-width: 500px;
+  margin: 15px auto;
+  background: #111;
+  padding: 12px;
+  border-radius: 16px;
+}
+
+img {
+  width: 100%;
+  border-radius: 12px;
+  display: none;
+}
+
+button, a {
+  border: 0;
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin: 7px;
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+
+#open { background: #2196f3; color: white; }
+#save { background: #16a34a; color: white; display:none; }
+#again { background: #ffb300; color: black; display:none; }
+#send { background: #e53935; color: white; display:none; }
+
+#message {
+  color: #ffe082;
+  margin: 18px;
+  line-height: 2;
+}
+
+footer {
+  color: #aaa;
+  margin-top: 30px;
+}
+</style>
+</head>
+
+<body>
+
+<h2>📸 دوربین سلفی گوشی</h2>
+<p>لبخند بزنید و عکس بگیرید!</p>
+
+<div class="box">
+
+  <img id="photo" alt="عکس گرفته شده">
+
+  <div id="placeholder">
+    <div style="font-size:65px">📷</div>
+    <p>برای شروع دوربین را باز کنید</p>
+  </div>
+
+</div>
+
+<input
+  type="file"
+  id="camera"
+  accept="image/*"
+  capture="user"
+  hidden
+>
+
+<div>
+
+<button id="open">
+📷 باز کردن دوربین سلفی
+</button>
+
+<button id="again" style="display:none">
+🔄 عکس جدید
+</button>
+
+</div>
+
+<div>
+
+<a id="save" download="selfie.jpg">
+💾 ذخیره عکس
+</a>
+
+<button id="send" style="display:none">
+📧 ارسال عکس به ایمیل
+</button>
+
+</div>
+
+<div id="message">
+آماده عکس‌برداری
+</div>
+
+<footer>
+sahroud game
+</footer>
+
+<script>
+
+const EMAIL = "sahroud@gmail.com";
+
+const camera = document.getElementById("camera");
+const photo = document.getElementById("photo");
+
+const openBtn = document.getElementById("open");
+const againBtn = document.getElementById("again");
+const saveBtn = document.getElementById("save");
+const sendBtn = document.getElementById("send");
+
+const message = document.getElementById("message");
+const placeholder = document.getElementById("placeholder");
+
+let finalBlob = null;
+let finalURL = null;
+
+// باز کردن دوربین سلفی
+function openCamera() {
+
+  camera.value = "";
+  camera.click();
+
+}
+
+openBtn.onclick = openCamera;
+againBtn.onclick = openCamera;
+
+
+// دریافت عکس
+camera.addEventListener("change", function() {
+
+  const file = this.files[0];
+
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    message.textContent = "فایل انتخاب شده عکس نیست.";
+    return;
+  }
+
+  message.textContent = "در حال آماده‌سازی عکس...";
+
+  const reader = new FileReader();
+
+  reader.onload = function(e) {
+
+    const img = new Image();
+
+    img.onload = function() {
+
+      const canvas = document.createElement("canvas");
+
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+
+      const ctx = canvas.getContext("2d");
+
+      // آینه‌ای کردن عکس
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+
+      ctx.drawImage(img, 0, 0);
+
+      // تبدیل عکس به فایل JPEG
+      canvas.toBlob(function(blob) {
+
+        if (!blob) {
+          message.textContent = "ساخت عکس ناموفق بود.";
+          return;
+        }
+
+        finalBlob = blob;
+
+        if (finalURL) {
+          URL.revokeObjectURL(finalURL);
+        }
+
+        finalURL = URL.createObjectURL(blob);
+
+        photo.src = finalURL;
+        photo.style.display = "block";
+
+        placeholder.style.display = "none";
+
+        saveBtn.href = finalURL;
+        saveBtn.style.display = "inline-block";
+
+        againBtn.style.display = "inline-block";
+        sendBtn.style.display = "inline-block";
+
+        message.textContent =
+          "عکس آماده است. ابتدا ذخیره کنید یا به ایمیل بفرستید.";
+
+      }, "image/jpeg", 0.92);
+
+    };
+
+    img.onerror = function() {
+      message.textContent = "خطا در خواندن عکس.";
+    };
+
+    img.src = e.target.result;
+
+  };
+
+  reader.onerror = function() {
+    message.textContent = "خواندن عکس ناموفق بود.";
+  };
+
+  reader.readAsDataURL(file);
+
+});
+
+
+// ذخیره عکس
+saveBtn.addEventListener("click", function() {
+
+  if (!finalBlob) return;
+
+  message.textContent = "عکس برای ذخیره آماده شد.";
+
+});
+
+
+// ارسال عکس با اشتراک‌گذاری گوشی
+sendBtn.onclick = async function() {
+
+  if (!finalBlob) {
+    message.textContent = "ابتدا عکس بگیرید.";
+    return;
+  }
+
+  const imageFile = new File(
+    [finalBlob],
+    "selfie.jpg",
+    { type: "image/jpeg" }
+  );
+
+  try {
+
+    if (navigator.canShare &&
+        navigator.canShare({ files: [imageFile] }) &&
+        navigator.share) {
+
+      await navigator.share({
+
+        files: [imageFile],
+
+        title: "عکس سلفی",
+
+        text: "عکس سلفی برای ارسال به " + EMAIL
+
+      });
+
+      message.textContent =
+        "منوی اشتراک‌گذاری باز شد. Gmail را انتخاب و آدرس مقصد را وارد کنید.";
+
+    } else {
+
+      const subject = encodeURIComponent("عکس سلفی");
+
+      const body = encodeURIComponent(
+        "سلام، عکس سلفی را پیوست کرده‌ام."
+      );
+
+      window.location.href =
+        "mailto:" + EMAIL +
+        "?subject=" + subject +
+        "&body=" + body;
+
+      message.textContent =
+        "عکس را از طریق گزینه ذخیره دانلود کنید و در Gmail پیوست کنید.";
+
+    }
+
+  } catch(error) {
+
+    if (error.name !== "AbortError") {
+
+      message.textContent =
+        "ارسال انجام نشد. عکس را ذخیره و از طریق Gmail پیوست کنید.";
+
+    }
+
+  }
+
+};
+
+
+// آزاد کردن حافظه
+window.addEventListener("pagehide", function() {
+
+  if (finalURL) {
+    URL.revokeObjectURL(finalURL);
+  }
+
+});
+
+</script>
+
+</body>
+</html>
