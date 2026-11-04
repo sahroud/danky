@@ -1,325 +1,344 @@
-
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>دوربین سلفی و ارسال ایمیل</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Pro Camera HD v4.2</title>
 
 <style>
-* { box-sizing: border-box; }
+  * {
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+  }
 
-body {
-  margin: 0;
-  padding: 16px;
-  background: #202832;
-  color: white;
-  font-family: Tahoma, sans-serif;
-  text-align: center;
-}
+  body {
+    margin: 0;
+    padding: 0;
+    background: #000;
+    color: white;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+  }
 
-h2 { color: #ffcf40; }
+  /* نوار بالای دوربین */
+  header {
+    background: rgba(0, 0, 0, 0.8);
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #222;
+    z-index: 10;
+  }
 
-.box {
-  max-width: 500px;
-  margin: 15px auto;
-  background: #111;
-  padding: 12px;
-  border-radius: 16px;
-}
+  .title {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: #00e676;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
 
-img {
-  width: 100%;
-  border-radius: 12px;
-  display: none;
-}
+  .badge {
+    background: red;
+    color: white;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: bold;
+    animation: pulse 1.5s infinite;
+  }
 
-button, a {
-  border: 0;
-  border-radius: 12px;
-  padding: 14px 18px;
-  margin: 7px;
-  font-size: 15px;
-  font-weight: bold;
-  cursor: pointer;
-  text-decoration: none;
-  display: inline-block;
-}
+  @keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.4; }
+    100% { opacity: 1; }
+  }
 
-#open { background: #2196f3; color: white; }
-#save { background: #16a34a; color: white; display:none; }
-#again { background: #ffb300; color: black; display:none; }
-#send { background: #e53935; color: white; display:none; }
+  /* کادر پیش‌نمایش دوربین */
+  #cameraBox {
+    position: relative;
+    width: 100%;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #111;
+    overflow: hidden;
+  }
 
-#message {
-  color: #ffe082;
-  margin: 18px;
-  line-height: 2;
-}
+  /* ویدیو آینه‌ای برای سلفی طبیعی */
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+  }
 
-footer {
-  color: #aaa;
-  margin-top: 30px;
-}
+  /* تصویر میمون روی ویدیو زنده (مخفی تا زمان شوت) */
+  #monkeyOverlay {
+    position: absolute;
+    bottom: 0;
+    left: 5%;
+    width: 35%;
+    max-width: 220px;
+    height: auto;
+    z-index: 5;
+    pointer-events: none;
+    display: none; /* فقط حین عکاسی ظاهر می‌شود یا می‌توان همیشه نمایش داد */
+    filter: drop-shadow(0px 5px 10px rgba(0,0,0,0.7));
+  }
+
+  /* گرید خطوط راهنما دوربین */
+  .grid-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    pointer-events: none;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: 1fr 1fr 1fr;
+  }
+  .grid-box {
+    border: 0.5px solid rgba(255, 255, 255, 0.08);
+  }
+
+  #resultImg {
+    display: none;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+  }
+
+  /* کنترل‌ها و دکمه‌های شاتر */
+  .controls {
+    background: #0d0d0d;
+    padding: 20px;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    border-top: 1px solid #222;
+    z-index: 10;
+  }
+
+  /* دکمه عکاسی (شاتر) */
+  #captureBtn {
+    width: 75px;
+    height: 75px;
+    border-radius: 50%;
+    background: transparent;
+    border: 4px solid #fff;
+    padding: 4px;
+    cursor: pointer;
+    outline: none;
+    transition: transform 0.1s;
+  }
+  #captureBtn:active {
+    transform: scale(0.9);
+  }
+  .shutter-inner {
+    width: 100%;
+    height: 100%;
+    background: #fff;
+    border-radius: 50%;
+  }
+
+  .btn-secondary {
+    background: #222;
+    color: white;
+    border: 1px solid #444;
+    padding: 10px 16px;
+    border-radius: 20px;
+    font-size: 14px;
+    cursor: pointer;
+    display: none;
+  }
+
+  #statusMessage {
+    position: absolute;
+    top: 15px;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 6px 14px;
+    border-radius: 15px;
+    font-size: 12px;
+    color: #eee;
+    z-index: 6;
+  }
 </style>
 </head>
 
 <body>
 
-<h2>📸 دوربین سلفی گوشی</h2>
-<p>لبخند بزنید و عکس بگیرید!</p>
+<header>
+  <div class="title">
+    <span>📸 Ultra HD Camera</span>
+    <span class="badge">PRO</span>
+  </div>
+  <div style="font-size: 12px; color: #888;">HDR OFF</div>
+</header>
 
-<div class="box">
+<div id="cameraBox">
+  <div id="statusMessage">در حال بارگذاری دوربین...</div>
 
-  <img id="photo" alt="عکس گرفته شده">
-
-  <div id="placeholder">
-    <div style="font-size:65px">📷</div>
-    <p>برای شروع دوربین را باز کنید</p>
+  <video id="video" autoplay playsinline muted></video>
+  
+  <!-- خطوط گرید عکاسی حرفه‌ای -->
+  <div class="grid-overlay">
+    <div class="grid-box"></div><div class="grid-box"></div><div class="grid-box"></div>
+    <div class="grid-box"></div><div class="grid-box"></div><div class="grid-box"></div>
+    <div class="grid-box"></div><div class="grid-box"></div><div class="grid-box"></div>
   </div>
 
+  <img id="resultImg" alt="تصویر ثبت شده">
 </div>
 
-<input
-  type="file"
-  id="camera"
-  accept="image/*"
-  capture="user"
-  hidden
->
+<canvas id="canvas" style="display:none"></canvas>
 
-<div>
-
-<button id="open">
-📷 باز کردن دوربین سلفی
-</button>
-
-<button id="again" style="display:none">
-🔄 عکس جدید
-</button>
-
+<div class="controls">
+  <button id="retryBtn" class="btn-secondary">🔄 عکس مجدد</button>
+  
+  <button id="captureBtn" disabled>
+    <div class="shutter-inner"></div>
+  </button>
+  
+  <a id="downloadBtn" class="btn-secondary" style="text-decoration: none;" download="HD_Photo.png">💾 ذخیره HD</a>
 </div>
-
-<div>
-
-<a id="save" download="selfie.jpg">
-💾 ذخیره عکس
-</a>
-
-<button id="send" style="display:none">
-📧 ارسال عکس به ایمیل
-</button>
-
-</div>
-
-<div id="message">
-آماده عکس‌برداری
-</div>
-
-<footer>
-sahroud game
-</footer>
 
 <script>
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
 
-const EMAIL = "sahroud@gmail.com";
+const captureBtn = document.getElementById("captureBtn");
+const retryBtn = document.getElementById("retryBtn");
+const downloadBtn = downloadBtn = document.getElementById("downloadBtn");
 
-const camera = document.getElementById("camera");
-const photo = document.getElementById("photo");
+const resultImg = document.getElementById("resultImg");
+const cameraBox = document.getElementById("cameraBox");
+const statusMessage = document.getElementById("statusMessage");
 
-const openBtn = document.getElementById("open");
-const againBtn = document.getElementById("again");
-const saveBtn = document.getElementById("save");
-const sendBtn = document.getElementById("send");
+let stream = null;
 
-const message = document.getElementById("message");
-const placeholder = document.getElementById("placeholder");
+// ۱. تصویر میمون خندان ایستاده با کیفیت (PNG شفاف)
+const monkeyImg = new Image();
+monkeyImg.crossOrigin = "anonymous";
+// لینک تصویر میمون خندان واقعی با پس‌زمینه شفاف
+monkeyImg.src = "https://png.pngtree.com/png-clipart/20230508/original/pngtree-smiling-chimpanzee-standing-png-image_9151528.png"; 
 
-let finalBlob = null;
-let finalURL = null;
+// ۲. افکت صوتی خنده شاد
+const laughAudio = new Audio("https://www.soundjay.com/human/laughter-1.mp3");
 
-// باز کردن دوربین سلفی
-function openCamera() {
+// درخواست مجوز و شروع خودکار دوربین هنگام ورود
+async function initCamera() {
+  try {
+    statusMessage.textContent = "در حال گرفتن دسترسی دوربین...";
+    
+    // درخواست صریح دسترسی به دوربین سلفی
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: "user",
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      },
+      audio: false
+    });
 
-  camera.value = "";
-  camera.click();
+    video.srcObject = stream;
+    await video.play();
 
+    statusMessage.textContent = "آماده عکاسی (کیفیت HD)";
+    captureBtn.disabled = false;
+
+  } catch (err) {
+    console.error(err);
+    statusMessage.textContent = "❌ خطادر دسترسی! لطفاً مجوز دوربین را در مرورگر تأیید کنید.";
+    alert("لطفاً اجازه دسترسی به دوربین را در مرورگر صادر کنید تا برنامه اجرا شود.");
+  }
 }
 
-openBtn.onclick = openCamera;
-againBtn.onclick = openCamera;
+// عکاسی و اعمال سوپرایز میمون
+captureBtn.onclick = function() {
+  if (!video.videoWidth) return;
 
+  // پخش صدای خنده
+  laughAudio.currentTime = 0;
+  laughAudio.play().catch(e => console.log("Audio play error:", e));
 
-// دریافت عکس
-camera.addEventListener("change", function() {
+  const width = video.videoWidth;
+  const height = video.videoHeight;
 
-  const file = this.files[0];
+  canvas.width = width;
+  canvas.height = height;
 
-  if (!file) return;
+  // الف) رسم تصویر سلفی به صورت آینه‌ای
+  ctx.save();
+  ctx.translate(width, 0);
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, 0, 0, width, height);
+  ctx.restore();
 
-  if (!file.type.startsWith("image/")) {
-    message.textContent = "فایل انتخاب شده عکس نیست.";
-    return;
+  // ب) رسم میمون خندان ایستاده در کنار فرد
+  // محاسبه اندازه میمون بر اساس ابعاد تصویر
+  const monkeyWidth = width * 0.38;
+  const monkeyHeight = monkeyWidth * 1.3; // نسبت طول به عرض میمون
+  
+  // قرار دادن میمون در سمت چپ پایین تصویر
+  const monkeyX = width * 0.05; 
+  const monkeyY = height - monkeyHeight;
+
+  if (monkeyImg.complete && monkeyImg.naturalWidth !== 0) {
+    ctx.drawImage(monkeyImg, monkeyX, monkeyY, monkeyWidth, monkeyHeight);
+  } else {
+    // جایگزین ایموجی در صورت عدم بارگذاری تصویر آنلاین
+    ctx.font = (width * 0.25) + "px Arial";
+    ctx.fillText("🐒", monkeyX, height * 0.8);
   }
 
-  message.textContent = "در حال آماده‌سازی عکس...";
+  // نمایش عکس نهایی
+  const dataURL = canvas.toDataURL("image/png");
+  resultImg.src = dataURL;
+  
+  video.style.display = "none";
+  resultImg.style.display = "block";
 
-  const reader = new FileReader();
+  // تغییر وضعیت دکمه‌ها
+  captureBtn.style.display = "none";
+  retryBtn.style.display = "inline-block";
+  downloadBtn.href = dataURL;
+  downloadBtn.style.display = "inline-block";
 
-  reader.onload = function(e) {
-
-    const img = new Image();
-
-    img.onload = function() {
-
-      const canvas = document.createElement("canvas");
-
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-
-      const ctx = canvas.getContext("2d");
-
-      // آینه‌ای کردن عکس
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1);
-
-      ctx.drawImage(img, 0, 0);
-
-      // تبدیل عکس به فایل JPEG
-      canvas.toBlob(function(blob) {
-
-        if (!blob) {
-          message.textContent = "ساخت عکس ناموفق بود.";
-          return;
-        }
-
-        finalBlob = blob;
-
-        if (finalURL) {
-          URL.revokeObjectURL(finalURL);
-        }
-
-        finalURL = URL.createObjectURL(blob);
-
-        photo.src = finalURL;
-        photo.style.display = "block";
-
-        placeholder.style.display = "none";
-
-        saveBtn.href = finalURL;
-        saveBtn.style.display = "inline-block";
-
-        againBtn.style.display = "inline-block";
-        sendBtn.style.display = "inline-block";
-
-        message.textContent =
-          "عکس آماده است. ابتدا ذخیره کنید یا به ایمیل بفرستید.";
-
-      }, "image/jpeg", 0.92);
-
-    };
-
-    img.onerror = function() {
-      message.textContent = "خطا در خواندن عکس.";
-    };
-
-    img.src = e.target.result;
-
-  };
-
-  reader.onerror = function() {
-    message.textContent = "خواندن عکس ناموفق بود.";
-  };
-
-  reader.readAsDataURL(file);
-
-});
-
-
-// ذخیره عکس
-saveBtn.addEventListener("click", function() {
-
-  if (!finalBlob) return;
-
-  message.textContent = "عکس برای ذخیره آماده شد.";
-
-});
-
-
-// ارسال عکس با اشتراک‌گذاری گوشی
-sendBtn.onclick = async function() {
-
-  if (!finalBlob) {
-    message.textContent = "ابتدا عکس بگیرید.";
-    return;
-  }
-
-  const imageFile = new File(
-    [finalBlob],
-    "selfie.jpg",
-    { type: "image/jpeg" }
-  );
-
-  try {
-
-    if (navigator.canShare &&
-        navigator.canShare({ files: [imageFile] }) &&
-        navigator.share) {
-
-      await navigator.share({
-
-        files: [imageFile],
-
-        title: "عکس سلفی",
-
-        text: "عکس سلفی برای ارسال به " + EMAIL
-
-      });
-
-      message.textContent =
-        "منوی اشتراک‌گذاری باز شد. Gmail را انتخاب و آدرس مقصد را وارد کنید.";
-
-    } else {
-
-      const subject = encodeURIComponent("عکس سلفی");
-
-      const body = encodeURIComponent(
-        "سلام، عکس سلفی را پیوست کرده‌ام."
-      );
-
-      window.location.href =
-        "mailto:" + EMAIL +
-        "?subject=" + subject +
-        "&body=" + body;
-
-      message.textContent =
-        "عکس را از طریق گزینه ذخیره دانلود کنید و در Gmail پیوست کنید.";
-
-    }
-
-  } catch(error) {
-
-    if (error.name !== "AbortError") {
-
-      message.textContent =
-        "ارسال انجام نشد. عکس را ذخیره و از طریق Gmail پیوست کنید.";
-
-    }
-
-  }
-
+  statusMessage.textContent = "😄 سوپرایز! عکس آماده شد.";
 };
 
+// عکس مجدد
+retryBtn.onclick = function() {
+  resultImg.style.display = "none";
+  video.style.display = "block";
 
-// آزاد کردن حافظه
-window.addEventListener("pagehide", function() {
+  captureBtn.style.display = "inline-block";
+  retryBtn.style.display = "none";
+  downloadBtn.style.display = "none";
 
-  if (finalURL) {
-    URL.revokeObjectURL(finalURL);
+  statusMessage.textContent = "آماده عکاسی (کیفیت HD)";
+};
+
+// راه‌اندازی دوربین هنگام بارگیری کامل صفحه
+window.addEventListener("load", initCamera);
+
+// خاموش کردن دوربین موقع بستن صفحه
+window.addEventListener("beforeunload", () => {
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
   }
-
 });
-
 </script>
 
 </body>
