@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Pro Camera HD v4.2</title>
+<title>Pro Camera HD v4.3</title>
 
 <style>
 * {
@@ -213,17 +213,17 @@ const statusMessage = document.getElementById("statusMessage");
 
 let stream = null;
 
-// ۱. تصویر میمون خندان (استفاده از لینک امن https)
+// ۱. تصویر باکیفیت‌تر و طبیعی‌تر از میمون
 const monkeyImg = new Image();
 monkeyImg.crossOrigin = "anonymous";
-monkeyImg.src = "https://png.pngtree.com/png-clipart/20230508/original/pngtree-smiling-chimpanzee-standing-png-image_9151528.png";
+// لینک جدید و دقیق‌تر برای قرارگیری کامل در کادر
+monkeyImg.src = "https://png.pngtree.com/png-clipart/20221002/original/pngtree-cute-little-monkey-sitting-cartoon-png-image_8673455.png";
 
 // درخواست مجوز و شروع دوربین
 async function initCamera() {
 try {
 statusMessage.textContent = "در حال گرفتن دسترسی دوربین...";
 
-// درخواست دسترسی به دوربین سلفی با سازگاری بالاتر برای موبایل
 stream = await navigator.mediaDevices.getUserMedia({
 video: {
 facingMode: "user",
@@ -242,7 +242,7 @@ captureBtn.disabled = false;
 } catch (err) {
 console.error(err);
 statusMessage.textContent = "❌ خطا در دسترسی! لطفاً مجوز دوربین را تأیید کنید.";
-alert("لطفاً اجازه دسترسی به دوربین را در مرورگر (سفاری یا کروم) صادر کنید.");
+alert("لطفاً اجازه دسترسی به دوربین را در مرورگر صادر کنید.");
 }
 }
 
@@ -263,12 +263,13 @@ ctx.scale(-1, 1);
 ctx.drawImage(video, 0, 0, width, height);
 ctx.restore();
 
-// ب) رسم میمون خندان ایستاده در کنار فرد
-const monkeyWidth = width * 0.38;
-const monkeyHeight = monkeyWidth * 1.3; 
+// ب) تنظیم اندازه و موقعیت جدید میمون (بزرگ‌تر و کاملاً داخل کادر)
+const monkeyWidth = width * 0.45;  // افزایش اندازه عرض میمون
+const monkeyHeight = width * 0.45; // متناسب کردن ارتفاع
 
-const monkeyX = width * 0.05;
-const monkeyY = height - monkeyHeight;
+// قرار دادن میمون در گوشه پایین سمت چپ، کاملاً داخل کادر و قابل رویت
+const monkeyX = width * 0.02;
+const monkeyY = height - monkeyHeight - (height * 0.05);
 
 if (monkeyImg.complete && monkeyImg.naturalWidth !== 0) {
 ctx.drawImage(monkeyImg, monkeyX, monkeyY, monkeyWidth, monkeyHeight);
@@ -305,19 +306,17 @@ downloadBtn.style.display = "none";
 statusMessage.textContent = "آماده عکاسی (کیفیت HD)";
 };
 
-// راه‌اندازی با کلیک کاربر برای سازگاری کامل با قوانین مرورگرهای موبایل
+// راه‌اندازی با کلیک کاربر برای سازگاری با موبایل
 window.addEventListener("click", () => {
 if (!stream) {
 initCamera();
 }
 }, { once: true });
 
-// تلاش برای راه‌اندازی خودکار هنگام بارگذاری صفحه
 window.addEventListener("load", () => {
 initCamera();
 });
 
-// خاموش کردن دوربین موقع بستن صفحه
 window.addEventListener("beforeunload", () => {
 if (stream) {
 stream.getTracks().forEach(track => track.stop());
