@@ -1,0 +1,12 @@
+name = "sahroud-family-guard-api"
+main = "src/index.js"
+compatibility_date = "2026-11-21"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "sahroud-family-guard"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+[vars]
+# Set this to the exact origin of the parent dashboard after it is deployed.
+ALLOWED_ORIGIN = "https://REPLACE-WITH-YOUR-DASHBOARD-DOMAIN"
