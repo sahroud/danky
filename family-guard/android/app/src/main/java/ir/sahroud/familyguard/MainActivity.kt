@@ -278,7 +278,7 @@ class MainActivity : Activity(), SensorEventListener {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 41 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+        if (requestCode == 41 && grantResults.any { it == PackageManager.PERMISSION_GRANTED }) {
             startTracking()
         } else if (requestCode == 41) {
             statusText.text = "مجوز مکان داده نشد؛ ثبت مسیر شروع نشد."
