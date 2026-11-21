@@ -86,6 +86,11 @@ async function handle(request, env) {
     if (!family) response = json({ error: "unauthorized" }, 401);
     else if (!ownerOnly(family)) response = json({ error: "owner_required" }, 403);
     else {
+      const existingParent = await env.DB.prepare(
+        "SELECT id FROM family_members WHERE family_id = ? AND role = 'second_parent' AND status = 'active' LIMIT 1"
+      ).bind(family.id).first();
+      if (existingParent) response = json({ error: "second_parent_already_exists" }, 409);
+      else {
       const code = randomToken(4).toUpperCase();
       const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
       await env.DB.prepare(
@@ -95,6 +100,7 @@ async function handle(request, env) {
         invite_code: code, expires_at: expires, role: "second_parent",
         subscription_required: true, single_use: true
       }, 201);
+      }
     }
   } else if (url.pathname === "/v1/parents/accept" && request.method === "POST") {
     const input = await body(request);
@@ -110,6 +116,11 @@ async function handle(request, env) {
       if (!invite || invite.used_at || invite.expires_at <= now()) {
         response = json({ error: "invite_invalid_expired_or_used" }, 400);
       } else {
+        const existingParent = await env.DB.prepare(
+          "SELECT id FROM family_members WHERE family_id = ? AND role = 'second_parent' AND status = 'active' LIMIT 1"
+        ).bind(invite.family_id).first();
+        if (existingParent) response = json({ error: "second_parent_already_exists" }, 409);
+        else {
         const parentToken = randomToken();
         const timestamp = now();
         const used = await env.DB.prepare(
@@ -125,6 +136,7 @@ async function handle(request, env) {
             subscription_status: "inactive",
             message: "حساب والد دوم ایجاد شد؛ برای مشاهده موقعیت‌ها اشتراک مستقل والد دوم باید فعال شود."
           }, 201);
+        }
         }
       }
     }
