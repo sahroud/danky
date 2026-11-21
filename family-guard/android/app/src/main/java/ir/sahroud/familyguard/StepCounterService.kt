@@ -16,6 +16,7 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
 import android.os.IBinder
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -74,12 +75,21 @@ class StepCounterService : Service(), SensorEventListener {
         val today = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
         val savedDay = prefs.getString("step_day", "")
         val previousRaw = prefs.getFloat("step_last_sensor", -1f)
+        val bootCount = try {
+            Settings.Global.getInt(contentResolver, Settings.Global.BOOT_COUNT, -1)
+        } catch (_: Exception) { -1 }
+        val previousBootCount = prefs.getInt("step_boot_count", -1)
         var count = prefs.getInt("today_steps", 0)
-        if (savedDay != today) count = 0
-        else if (previousRaw >= 0f && raw >= previousRaw) count += (raw - previousRaw).toInt().coerceAtLeast(0)
-        // Hardware counter may reset after a phone reboot; establish a fresh baseline.
+        val newDay = savedDay != today
+        val rebooted = bootCount >= 0 && previousBootCount >= 0 && bootCount != previousBootCount
+        if (newDay) count = 0
+        // Never subtract counters across a reboot. Keep the day's saved total and establish a new baseline.
+        else if (!rebooted && previousRaw >= 0f && raw >= previousRaw) {
+            count += (raw - previousRaw).toInt().coerceAtLeast(0)
+        }
         prefs.edit().putString("step_day", today).putFloat("step_last_sensor", raw)
-            .putInt("today_steps", count).putBoolean("step_service_active", true).apply()
+            .putInt("step_boot_count", bootCount).putInt("today_steps", count)
+            .putBoolean("step_service_active", true).apply()
         sendUpdate()
         updateNotification(count)
     }
