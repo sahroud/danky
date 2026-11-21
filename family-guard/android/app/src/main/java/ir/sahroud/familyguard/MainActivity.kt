@@ -11,8 +11,6 @@ import android.os.Build
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.location.Location
 import android.net.Uri
@@ -41,7 +39,6 @@ class MainActivity : Activity(), SensorEventListener {
     private var totalDistance = 0f
     private var routePoints = mutableListOf<String>()
     private var todaySteps = 0
-    private var stepBase = -1f
     private var waterGlasses = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -98,6 +95,9 @@ class MainActivity : Activity(), SensorEventListener {
         root.addView(heading("۲) گام‌شمار و فعالیت روزانه"))
         stepsText = body("در حال آماده‌سازی حسگر گام‌شمار…")
         root.addView(stepsText)
+        root.addView(action("فعال‌سازی گام‌شمار پس‌زمینه") { startStepCounter() })
+        root.addView(action("توقف گام‌شمار پس‌زمینه") { stopStepCounter() })
+        root.addView(body("برای شمارش در پس‌زمینه، سرویس آشکار با اعلان دائمی فعال می‌شود. برای توقف از اعلان یا دکمهٔ بالا استفاده کنید."))
         root.addView(body("هدف پیش‌فرض روزانه: ۶۰۰۰ گام. شمارش به حسگر گوشی وابسته است و برای دقت بهتر گوشی را همراه خود داشته باشید."))
         root.addView(action("تازه‌سازی وضعیت گام‌شمار") { refreshStepsText() })
 
@@ -129,6 +129,7 @@ class MainActivity : Activity(), SensorEventListener {
     private val locationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == LocationTrackingService.ACTION_LOCATION_UPDATE) restoreRouteDisplay()
+            if (intent?.action == StepCounterService.ACTION_STEPS_UPDATE) refreshStepsText()
         }
     }
 
@@ -190,7 +191,7 @@ class MainActivity : Activity(), SensorEventListener {
         locationText.text = "مسیر پاک شد."
     }
 
-    override fun onSensorChanged(event: SensorEvent?) {
+    private fun onSensorChangedLegacy(event: Any?) {
         if (event?.sensor?.type != Sensor.TYPE_STEP_COUNTER) return
         val totalSinceBoot = event.values[0]
         val savedDay = prefs.getString("step_day", "")
@@ -205,16 +206,34 @@ class MainActivity : Activity(), SensorEventListener {
         refreshStepsText()
     }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
-    private fun registerStepSensor() {
-        val s = stepSensor ?: return
-        if (Build.VERSION.SDK_INT >= 29 &&
-            checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.ACTIVITY_RECOGNITION), 42)
-        } else {
-            sensorManager.registerListener(this, s, SensorManager.SENSOR_DELAY_NORMAL)
+
+    private fun startStepCounter() {
+        if (stepSensor == null) {
+            Toast.makeText(this, "حسگر سخت‌افزاری گام‌شمار در این گوشی موجود نیست.", Toast.LENGTH_LONG).show()
+            return
         }
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 43)
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 29 && checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.ACTIVITY_RECOGNITION), 42)
+            return
+        }
+        try {
+            val intent = Intent(this, StepCounterService::class.java).setAction(StepCounterService.ACTION_START)
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent) else startService(intent)
+            stepsText.text = "درخواست فعال‌سازی گام‌شمار پس‌زمینه ارسال شد."
+        } catch (e: Exception) {
+            stepsText.text = "شروع گام‌شمار ناموفق بود: ${e.localizedMessage ?: "خطای نامشخص"}"
+        }
+    }
+
+    private fun stopStepCounter() {
+        try { startService(Intent(this, StepCounterService::class.java).setAction(StepCounterService.ACTION_STOP)) } catch (_: Exception) {}
+        prefs.edit().putBoolean("step_service_active", false).apply()
+        refreshStepsText()
     }
 
     private fun refreshStepsText() {
@@ -224,7 +243,8 @@ class MainActivity : Activity(), SensorEventListener {
         }
         todaySteps = prefs.getInt("today_steps", todaySteps)
         val progress = (todaySteps * 100 / 6000).coerceAtMost(100)
-        stepsText.text = "گام امروز: $todaySteps\nپیشرفت هدف ۶۰۰۰ گام: $progress٪\nمسافت تقریبی بر اساس گام: ${formatDistance(todaySteps * 0.75f)}"
+        val state = if (prefs.getBoolean("step_service_active", false)) "گام‌شمار پس‌زمینه: فعال" else "گام‌شمار پس‌زمینه: متوقف"
+        stepsText.text = "گام امروز: $todaySteps\nپیشرفت هدف ۶۰۰۰ گام: $progress٪\nمسافت تقریبی بر اساس گام: ${formatDistance(todaySteps * 0.75f)}\n$state"
     }
 
     private fun refreshHealth() {
@@ -283,20 +303,22 @@ class MainActivity : Activity(), SensorEventListener {
         } else if (requestCode == 41) {
             statusText.text = "مجوز مکان داده نشد؛ ثبت مسیر شروع نشد."
         }
-        if (requestCode == 42 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            stepSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
+        if ((requestCode == 42 || requestCode == 43) && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            startStepCounter()
+        } else if (requestCode == 42 || requestCode == 43) {
+            Toast.makeText(this, "مجوز لازم داده نشد؛ گام‌شمار پس‌زمینه شروع نشد.", Toast.LENGTH_LONG).show()
         }
     }
 
     override fun onResume() {
         super.onResume()
         try {
-            val filter = IntentFilter(LocationTrackingService.ACTION_LOCATION_UPDATE)
+            val filter = IntentFilter(LocationTrackingService.ACTION_LOCATION_UPDATE).apply { addAction(StepCounterService.ACTION_STEPS_UPDATE) }
             if (Build.VERSION.SDK_INT >= 33) registerReceiver(locationReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
             else registerReceiver(locationReceiver, filter)
         } catch (_: Exception) {}
         restoreRouteDisplay()
-        registerStepSensor()
+        refreshStepsText()
     }
 
     override fun onPause() {
