@@ -37,3 +37,8 @@ CREATE TABLE IF NOT EXISTS parent_invites (
 );
 CREATE INDEX IF NOT EXISTS idx_parent_invites_family_expiry
   ON parent_invites(family_id, expires_at);
+
+-- A family has at most one active second-parent account.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_one_second_parent_per_family
+  ON family_members(family_id)
+  WHERE role = 'second_parent' AND status = 'active';
