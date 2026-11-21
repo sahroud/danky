@@ -5,6 +5,9 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.os.Build
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.hardware.Sensor
@@ -12,11 +15,8 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.location.Location
-import android.location.LocationListener
-import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
-import android.os.Looper
 import android.view.Gravity
 import android.widget.Button
 import android.widget.EditText
@@ -28,9 +28,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class MainActivity : Activity(), LocationListener, SensorEventListener {
+class MainActivity : Activity(), SensorEventListener {
     private val prefs by lazy { getSharedPreferences("sahroud_health", Context.MODE_PRIVATE) }
-    private lateinit var locationManager: LocationManager
     private lateinit var sensorManager: SensorManager
     private var stepSensor: Sensor? = null
     private lateinit var statusText: TextView
@@ -39,11 +38,7 @@ class MainActivity : Activity(), LocationListener, SensorEventListener {
     private lateinit var distanceText: TextView
     private lateinit var healthText: TextView
     private lateinit var waterText: TextView
-    private var tracking = false
-    private var lastLocation: Location? = null
     private var totalDistance = 0f
-    private var lastLat = 0.0
-    private var lastLon = 0.0
     private var routePoints = mutableListOf<String>()
     private var todaySteps = 0
     private var stepBase = -1f
@@ -51,7 +46,6 @@ class MainActivity : Activity(), LocationListener, SensorEventListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        locationManager = getSystemService(LOCATION_SERVICE) as LocationManager
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
         stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
         waterGlasses = prefs.getInt("water_" + dayKey(), 0)
@@ -95,8 +89,9 @@ class MainActivity : Activity(), LocationListener, SensorEventListener {
         root.addView(statusText)
         root.addView(locationText)
         root.addView(distanceText)
-        root.addView(action("شروع ثبت موقعیت و مسیر") { startTracking() })
+        root.addView(action("شروع ثبت مسیر در پس‌زمینه") { startTracking() })
         root.addView(action("توقف ثبت موقعیت") { stopTracking() })
+        root.addView(body("هنگام ثبت پس‌زمینه، اعلان دائمی و قابل مشاهده نمایش داده می‌شود؛ هر زمان می‌توانید آن را متوقف کنید."))
         root.addView(action("نمایش آخرین موقعیت روی نقشه") { openLastLocation() })
         root.addView(action("پاک کردن مسیر و مسافت این نوبت") { clearRoute() })
 
@@ -128,55 +123,48 @@ class MainActivity : Activity(), LocationListener, SensorEventListener {
         setContentView(ScrollView(this).apply { addView(root) })
         refreshHealth()
         refreshStepsText()
+        restoreRouteDisplay()
+    }
+
+    private val locationReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == LocationTrackingService.ACTION_LOCATION_UPDATE) restoreRouteDisplay()
+        }
+    }
+
+    private fun restoreRouteDisplay() {
+        val lat = prefs.getString("last_lat", null)
+        val lon = prefs.getString("last_lon", null)
+        if (lat != null && lon != null) {
+            locationText.text = "آخرین موقعیت: عرض $lat | طول $lon\nزمان ثبت: ${prefs.getString("last_location_time", "نامشخص")}"
+        }
+        totalDistance = prefs.getFloat("route_distance", totalDistance)
+        routePoints = prefs.getString("route_points", "").orEmpty().split("|").filter { it.isNotBlank() }.toMutableList()
+        distanceText.text = "مسافت ثبت‌شده: ${formatDistance(totalDistance)} | نقاط مسیر: ${routePoints.size}"
+        statusText.text = if (prefs.getBoolean("tracking_active", false)) "ثبت مسیر پس‌زمینه فعال است؛ اعلان برنامه باید قابل مشاهده باشد." else "ثبت موقعیت متوقف است."
     }
 
     private fun dayKey(): String = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
 
     private fun startTracking() {
-        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+            checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 41)
             return
         }
         try {
-            tracking = true
-            lastLocation = null
-            totalDistance = 0f
-            routePoints.clear()
-            statusText.text = "ثبت مسیر روشن است؛ فقط هنگام استفاده از برنامه موقعیت ثبت می‌شود."
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 3000L, 2f, this, Looper.getMainLooper())
-            locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)?.let { onLocationChanged(it) }
+            val intent = Intent(this, LocationTrackingService::class.java).setAction(LocationTrackingService.ACTION_START)
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent) else startService(intent)
+            statusText.text = "درخواست شروع ثبت مسیر پس‌زمینه ارسال شد."
         } catch (e: Exception) {
-            tracking = false
-            statusText.text = "خطا در GPS: ${e.localizedMessage ?: "دسترسی ناموفق"}"
+            statusText.text = "شروع سرویس ناموفق بود: ${e.localizedMessage ?: "خطای نامشخص"}"
         }
     }
 
     private fun stopTracking() {
-        tracking = false
-        if (::locationManager.isInitialized) locationManager.removeUpdates(this)
-        prefs.edit().putFloat("route_distance", totalDistance)
-            .putString("route_points", routePoints.joinToString("|")).apply()
-        statusText.text = "ثبت مسیر متوقف شد. اطلاعات مسیر روی همین گوشی ذخیره شد."
-    }
-
-    override fun onLocationChanged(location: Location) {
-        if (!tracking) return
-        if (location.accuracy > 60f) return
-        lastLocation?.let {
-            val delta = it.distanceTo(location)
-            if (delta in 1f..500f) totalDistance += delta
-        }
-        lastLocation = location
-        lastLat = location.latitude
-        lastLon = location.longitude
-        val point = "${location.latitude},${location.longitude}"
-        if (routePoints.isEmpty() || routePoints.last() != point) routePoints.add(point)
-        prefs.edit().putFloat("route_distance", totalDistance)
-            .putString("route_points", routePoints.joinToString("|"))
-            .putString("last_lat", lastLat.toString())
-            .putString("last_lon", lastLon.toString()).apply()
-        locationText.text = "عرض: ${"%.6f".format(Locale.US, lastLat)} | طول: ${"%.6f".format(Locale.US, lastLon)}\nدقت GPS: ${location.accuracy.toInt()} متر"
-        distanceText.text = "مسافت این نوبت: ${formatDistance(totalDistance)} | نقاط مسیر: ${routePoints.size}"
+        try { startService(Intent(this, LocationTrackingService::class.java).setAction(LocationTrackingService.ACTION_STOP)) } catch (_: Exception) {}
+        prefs.edit().putBoolean("tracking_active", false).apply()
+        statusText.text = "درخواست توقف ثبت مسیر ارسال شد."
     }
 
     private fun formatDistance(m: Float): String =
@@ -219,22 +207,14 @@ class MainActivity : Activity(), LocationListener, SensorEventListener {
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
-    override fun onResume() {
-        super.onResume()
-        val s = stepSensor
-        if (s != null) {
-            if (android.os.Build.VERSION.SDK_INT >= 29 &&
-                checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(Manifest.permission.ACTIVITY_RECOGNITION), 42)
-            } else {
-                sensorManager.registerListener(this, s, SensorManager.SENSOR_DELAY_NORMAL)
-            }
+    private fun registerStepSensor() {
+        val s = stepSensor ?: return
+        if (Build.VERSION.SDK_INT >= 29 &&
+            checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.ACTIVITY_RECOGNITION), 42)
+        } else {
+            sensorManager.registerListener(this, s, SensorManager.SENSOR_DELAY_NORMAL)
         }
-    }
-
-    override fun onPause() {
-        sensorManager.unregisterListener(this)
-        super.onPause()
     }
 
     private fun refreshStepsText() {
@@ -308,8 +288,24 @@ class MainActivity : Activity(), LocationListener, SensorEventListener {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        try {
+            val filter = IntentFilter(LocationTrackingService.ACTION_LOCATION_UPDATE)
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(locationReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            else registerReceiver(locationReceiver, filter)
+        } catch (_: Exception) {}
+        restoreRouteDisplay()
+        registerStepSensor()
+    }
+
+    override fun onPause() {
+        try { unregisterReceiver(locationReceiver) } catch (_: Exception) {}
+        sensorManager.unregisterListener(this)
+        super.onPause()
+    }
+
     override fun onDestroy() {
-        stopTracking()
         sensorManager.unregisterListener(this)
         super.onDestroy()
     }
