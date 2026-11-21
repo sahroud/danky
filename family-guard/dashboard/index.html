@@ -120,6 +120,36 @@ function renderDevices(devices) {
       map.target="_blank";map.rel="noopener";map.textContent="نمایش آخرین موقعیت روی نقشه";
       item.append(map);
     }
+    const historyButton=document.createElement("button");
+    historyButton.className="secondary";
+    historyButton.textContent="نمایش تاریخچه مسیر";
+    historyButton.onclick=async()=>{
+      historyButton.disabled=true;
+      try{
+        const history=await call("/v1/family/devices/"+encodeURIComponent(device.id)+"/locations?limit=100");
+        const list=document.createElement("div");
+        list.className="status";
+        if(!history.locations.length) list.textContent="برای این دستگاه هنوز سابقه‌ای ثبت نشده است.";
+        else {
+          history.locations.forEach(point=>{
+            const line=document.createElement("div");
+            const time=new Date(point.recorded_at).toLocaleString("fa-IR");
+            const link=document.createElement("a");
+            link.href="https://www.openstreetmap.org/?mlat="+encodeURIComponent(point.latitude)+"&mlon="+encodeURIComponent(point.longitude)+"#map=17/"+point.latitude+"/"+point.longitude;
+            link.target="_blank";link.rel="noopener";
+            link.textContent=time+" | نمایش نقطه روی نقشه";
+            line.append(link);
+            list.append(line);
+          });
+        }
+        const previous=item.querySelector(".history-list");
+        if(previous) previous.remove();
+        list.classList.add("history-list");
+        item.append(list);
+      }catch(e){say("دریافت تاریخچه ناموفق: "+e.message);}
+      finally{historyButton.disabled=false;}
+    };
+    item.append(historyButton);
     if(device.sharing_enabled){
       const stop=document.createElement("button");stop.className="danger";stop.textContent="لغو دسترسی این دستگاه";
       stop.onclick=async()=>{if(!confirm("اشتراک‌گذاری موقعیت این دستگاه متوقف شود؟"))return;try{await call("/v1/family/devices/"+encodeURIComponent(device.id)+"/revoke",{method:"POST",body:"{}"});await refreshDevices();say("دسترسی دستگاه لغو شد.");}catch(e){say("خطا: "+e.message);}};
