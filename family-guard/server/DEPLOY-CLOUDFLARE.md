@@ -19,6 +19,9 @@
 7. فایل schema.sql در GitHub را باز کنید، تمام SQL را کپی کنید و در کنسول D1 اجرا کنید:
    https://github.com/sahroud/danky/blob/main/family-guard/server/schema.sql
 8. مطمئن شوید چهار جدول families، devices، invites و locations ساخته شده‌اند.
+9. برای حفظ خانواده‌ها و توکن‌های قبلی و افزودن حساب مستقل والد دوم، فایل مهاجرت زیر را نیز یک‌بار در کنسول D1 اجرا کنید:
+   https://github.com/sahroud/danky/blob/main/family-guard/server/migrations/0002_multi_parent.sql
+10. پس از اجرای موفق مهاجرت، جدول‌های family_members و parent_invites نیز باید وجود داشته باشند. مهاجرت، توکن والد فعلی را به نقش والد اصلی منتقل می‌کند و داده‌های قبلی را حذف نمی‌کند.
 
 ## بخش ۲ — ساخت Worker API
 
