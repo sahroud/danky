@@ -94,6 +94,12 @@ class MainActivity : Activity() {
         root.addView(action("نمایش آخرین موقعیت روی نقشه") { openLastLocation() })
         root.addView(action("پاک کردن مسیر و مسافت این نوبت") { clearRoute() })
 
+        root.addView(heading("اتصال به خانواده و اشتراک‌گذاری موقعیت"))
+        root.addView(body("اتصال فقط با کد دعوت والد و تأیید آگاهانه صاحب همین گوشی انجام می‌شود. پس از اتصال، ارسال موقعیت فقط هنگام فعال بودن ثبت مسیر و نمایش اعلان انجام می‌شود."))
+        root.addView(action("اتصال این گوشی به خانواده با کد دعوت") { pairDevice() })
+        root.addView(action("قطع اشتراک‌گذاری و خروج از خانواده") { stopFamilySharing() })
+        root.addView(body("وضعیت اتصال: ${if (DeviceCredentials.get(this).getString("device_token", null).isNullOrBlank()) "متصل نیست" else "دارای کلید اتصال"}"))
+
         root.addView(heading("۲) گام‌شمار و فعالیت روزانه"))
         stepsText = body("در حال آماده‌سازی حسگر گام‌شمار…")
         root.addView(stepsText)
@@ -148,6 +154,99 @@ class MainActivity : Activity() {
         routePoints = prefs.getString("route_points", "").orEmpty().split("|").filter { it.isNotBlank() }.toMutableList()
         distanceText.text = "مسافت ثبت‌شده: ${formatDistance(totalDistance)} | نقاط مسیر: ${routePoints.size}"
         statusText.text = if (prefs.getBoolean("tracking_active", false)) "ثبت مسیر پس‌زمینه فعال است؛ اعلان برنامه باید قابل مشاهده باشد." else "ثبت موقعیت متوقف است."
+    }
+
+
+    private fun pairDevice() {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(28, 8, 28, 0)
+        }
+        val apiInput = EditText(this).apply {
+            hint = "نشانی کامل API (https://...workers.dev)"
+            setSingleLine(true)
+            setText(prefs.getString("family_api_url", ""))
+        }
+        val codeInput = EditText(this).apply { hint = "کد دعوت والد"; setSingleLine(true) }
+        val labelInput = EditText(this).apply { hint = "نام این گوشی/عضو"; setSingleLine(true) }
+        val consent = android.widget.CheckBox(this).apply {
+            text = "آگاه هستم که موقعیت این گوشی هنگام فعال بودن ثبت مسیر برای مدیر خانواده ارسال می‌شود و هر زمان می‌توانم اشتراک‌گذاری را متوقف کنم."
+        }
+        box.addView(apiInput); box.addView(codeInput); box.addView(labelInput); box.addView(consent)
+        AlertDialog.Builder(this)
+            .setTitle("اتصال با رضایت صاحب گوشی")
+            .setView(box)
+            .setNegativeButton("انصراف", null)
+            .setPositiveButton("تأیید و اتصال") { _, _ ->
+                val api = apiInput.text.toString().trim().trimEnd('/')
+                val code = codeInput.text.toString().trim()
+                val label = labelInput.text.toString().trim()
+                if (!api.startsWith("https://") || code.isBlank() || label.isBlank() || !consent.isChecked) {
+                    Toast.makeText(this, "نشانی HTTPS، کد، نام دستگاه و تأیید رضایت الزامی است.", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                prefs.edit().putString("family_api_url", api).apply()
+                Thread {
+                    try {
+                        val connection = java.net.URL("$api/v1/devices/pair").openConnection() as java.net.HttpURLConnection
+                        connection.requestMethod = "POST"
+                        connection.connectTimeout = 15000
+                        connection.readTimeout = 15000
+                        connection.doOutput = true
+                        connection.setRequestProperty("Content-Type", "application/json")
+                        val payload = org.json.JSONObject()
+                            .put("invite_code", code)
+                            .put("device_label", label)
+                            .put("consent", true).toString()
+                        connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+                        val stream = if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream
+                        val response = stream.bufferedReader().use { it.readText() }
+                        if (connection.responseCode !in 200..299) throw IllegalStateException(response)
+                        val data = org.json.JSONObject(response)
+                        DeviceCredentials.get(this).edit()
+                            .putString("device_token", data.getString("device_token"))
+                            .putString("device_id", data.getString("device_id"))
+                            .putString("device_label", label)
+                            .apply()
+                        runOnUiThread {
+                            Toast.makeText(this, "این گوشی با رضایت شما به خانواده متصل شد.", Toast.LENGTH_LONG).show()
+                            restoreRouteDisplay()
+                        }
+                        connection.disconnect()
+                    } catch (e: Exception) {
+                        runOnUiThread { Toast.makeText(this, "اتصال ناموفق: ${e.message ?: "خطای شبکه"}", Toast.LENGTH_LONG).show() }
+                    }
+                }.start()
+            }.show()
+    }
+
+    private fun stopFamilySharing() {
+        val secure = DeviceCredentials.get(this)
+        val token = secure.getString("device_token", null)
+        val api = prefs.getString("family_api_url", null)
+        if (token.isNullOrBlank() || api.isNullOrBlank()) {
+            secure.edit().clear().apply()
+            Toast.makeText(this, "اتصال خانوادگی روی این گوشی وجود نداشت.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        Thread {
+            try {
+                val connection = java.net.URL("$api/v1/devices/sharing/stop").openConnection() as java.net.HttpURLConnection
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 10000
+                connection.readTimeout = 10000
+                connection.doOutput = true
+                connection.setRequestProperty("Authorization", "Bearer $token")
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.outputStream.use { it.write("{}".toByteArray()) }
+                if (connection.responseCode !in 200..299) throw IllegalStateException("HTTP ${connection.responseCode}")
+                connection.disconnect()
+                secure.edit().clear().apply()
+                runOnUiThread { Toast.makeText(this, "اشتراک‌گذاری در سرور متوقف و کلید این گوشی پاک شد.", Toast.LENGTH_LONG).show() }
+            } catch (e: Exception) {
+                runOnUiThread { Toast.makeText(this, "توقف در سرور انجام نشد: ${e.message}", Toast.LENGTH_LONG).show() }
+            }
+        }.start()
     }
 
     private fun dayKey(): String = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
