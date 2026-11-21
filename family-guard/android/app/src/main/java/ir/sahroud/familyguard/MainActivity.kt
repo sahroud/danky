@@ -309,8 +309,4 @@ class MainActivity : Activity() {
         super.onPause()
     }
 
-    override fun onDestroy() {
-        sensorManager.unregisterListener(this)
-        super.onDestroy()
-    }
 }
