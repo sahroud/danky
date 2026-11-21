@@ -52,6 +52,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <h2>ثبت‌نام والد دوم با کد دعوت</h2>
 <label for="secondParentName">نام والد دوم</label><input id="secondParentName" maxlength="80" placeholder="نام والد دوم">
 <label for="secondParentCode">کد دعوت والد دوم</label><input id="secondParentCode" maxlength="32" dir="ltr" placeholder="کد یک‌بارمصرف">
+<label><input id="parentConsent" type="checkbox" style="width:auto"> با ایجاد حساب مستقل والد دوم و شرایط اشتراک آن موافقم.</label>
 <button id="acceptParent">ثبت‌نام والد دوم</button>
 <p class="muted">ثبت‌نام فقط با دعوت معتبر و تأیید آگاهانه انجام می‌شود. حساب والد دوم مستقل است و دسترسی مکانی آن تا فعال‌شدن اشتراک جداگانه محدود خواهد بود.</p>
 <div id="secondParentResult" class="status hidden"></div>
@@ -120,6 +121,7 @@ $("parentInvite").onclick = async () => {
 };
 $("acceptParent").onclick = async () => {
   const box=$("secondParentResult");
+  if (!$("parentConsent").checked) return say("برای ثبت‌نام والد دوم، ابتدا رضایت خود را تأیید کنید.");
   try {
     const response=await fetch(api()+"/v1/parents/accept",{
       method:"POST",headers:{"content-type":"application/json"},
