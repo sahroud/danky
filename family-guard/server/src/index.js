@@ -27,9 +27,20 @@ const bearer = request => {
 async function parentAuth(request, env) {
   const token = bearer(request);
   if (!token) return null;
-  return env.DB.prepare("SELECT id, parent_label FROM families WHERE parent_token_hash = ?")
-    .bind(await hash(token)).first();
+  const member = await env.DB.prepare(
+    `SELECT m.id AS member_id, m.family_id AS id, m.role, m.subscription_status,
+      m.subscription_expires_at, f.parent_label
+     FROM family_members m JOIN families f ON f.id = m.family_id
+     WHERE m.token_hash = ? AND m.status = 'active'`
+  ).bind(await hash(token)).first();
+  return member || null;
 }
+
+const ownerOnly = family => family?.role === "owner";
+const paidParentActive = family => family?.role === "owner" ||
+  (family?.role === "second_parent" &&
+   family.subscription_status === "active" &&
+   (!family.subscription_expires_at || family.subscription_expires_at > now()));
 
 async function deviceAuth(request, env) {
   const token = bearer(request);
@@ -55,18 +66,82 @@ async function handle(request, env) {
     else {
       const familyId = id();
       const parentToken = randomToken();
-      await env.DB.prepare(
-        "INSERT INTO families (id, parent_label, parent_token_hash, created_at) VALUES (?, ?, ?, ?)"
-      ).bind(familyId, label, await hash(parentToken), now()).run();
+      const tokenHash = await hash(parentToken);
+      await env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO families (id, parent_label, parent_token_hash, created_at) VALUES (?, ?, ?, ?)"
+        ).bind(familyId, label, tokenHash, now()),
+        env.DB.prepare(
+          "INSERT INTO family_members (id, family_id, role, label, token_hash, status, subscription_status, created_at) VALUES (?, ?, 'owner', ?, ?, 'active', 'included', ?)"
+        ).bind(id(), familyId, label, tokenHash, now())
+      ]);
       response = json({
         family_id: familyId,
         parent_token: parentToken,
         message: "این کلید فقط یک بار نمایش داده می‌شود؛ آن را محرمانه نگه دارید."
       }, 201);
     }
+  } else if (url.pathname === "/v1/parents/invite" && request.method === "POST") {
+    const family = await parentAuth(request, env);
+    if (!family) response = json({ error: "unauthorized" }, 401);
+    else if (!ownerOnly(family)) response = json({ error: "owner_required" }, 403);
+    else {
+      const code = randomToken(4).toUpperCase();
+      const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      await env.DB.prepare(
+        "INSERT INTO parent_invites (code_hash, family_id, expires_at, created_at) VALUES (?, ?, ?, ?)"
+      ).bind(await hash(code), family.id, expires, now()).run();
+      response = json({
+        invite_code: code, expires_at: expires, role: "second_parent",
+        subscription_required: true, single_use: true
+      }, 201);
+    }
+  } else if (url.pathname === "/v1/parents/accept" && request.method === "POST") {
+    const input = await body(request);
+    const code = String(input?.invite_code || "").trim().toUpperCase();
+    const label = String(input?.parent_label || "").trim().slice(0, 80);
+    if (!code || !label || input?.consent !== true) {
+      response = json({ error: "invite_label_and_explicit_consent_required" }, 400);
+    } else {
+      const codeHash = await hash(code);
+      const invite = await env.DB.prepare(
+        "SELECT code_hash, family_id, expires_at, used_at FROM parent_invites WHERE code_hash = ?"
+      ).bind(codeHash).first();
+      if (!invite || invite.used_at || invite.expires_at <= now()) {
+        response = json({ error: "invite_invalid_expired_or_used" }, 400);
+      } else {
+        const parentToken = randomToken();
+        const timestamp = now();
+        const used = await env.DB.prepare(
+          "UPDATE parent_invites SET used_at = ? WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?"
+        ).bind(timestamp, codeHash, timestamp).run();
+        if (!used.meta?.changes) response = json({ error: "invite_already_used" }, 409);
+        else {
+          await env.DB.prepare(
+            "INSERT INTO family_members (id, family_id, role, label, token_hash, status, subscription_status, created_at) VALUES (?, ?, 'second_parent', ?, ?, 'active', 'inactive', ?)"
+          ).bind(id(), invite.family_id, label, await hash(parentToken), timestamp).run();
+          response = json({
+            parent_token: parentToken, role: "second_parent",
+            subscription_status: "inactive",
+            message: "حساب والد دوم ایجاد شد؛ برای مشاهده موقعیت‌ها اشتراک مستقل والد دوم باید فعال شود."
+          }, 201);
+        }
+      }
+    }
+  } else if (url.pathname === "/v1/family/subscription" && request.method === "GET") {
+    const family = await parentAuth(request, env);
+    if (!family) response = json({ error: "unauthorized" }, 401);
+    else response = json({
+      role: family.role,
+      subscription_status: family.subscription_status,
+      subscription_expires_at: family.subscription_expires_at || null,
+      second_parent_subscription: "separate_paid_subscription"
+    });
   } else if (url.pathname === "/v1/invites" && request.method === "POST") {
     const family = await parentAuth(request, env);
     if (!family) response = json({ error: "unauthorized" }, 401);
+    else if (!ownerOnly(family)) response = json({ error: "owner_required" }, 403);
+    else if (!paidParentActive(family)) response = json({ error: "subscription_inactive", subscription_required: true }, 402);
     else {
       const code = randomToken(4).toUpperCase();
       const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
@@ -136,6 +211,7 @@ async function handle(request, env) {
   } else if (url.pathname === "/v1/family/devices" && request.method === "GET") {
     const family = await parentAuth(request, env);
     if (!family) response = json({ error: "unauthorized" }, 401);
+    else if (!paidParentActive(family)) response = json({ error: "subscription_inactive", subscription_required: true }, 402);
     else {
       const result = await env.DB.prepare(
         `SELECT d.id, d.label, d.sharing_enabled, d.consented_at, d.last_seen_at,
@@ -151,6 +227,7 @@ async function handle(request, env) {
   } else if (url.pathname.startsWith("/v1/family/devices/") && url.pathname.endsWith("/locations") && request.method === "GET") {
     const family = await parentAuth(request, env);
     if (!family) response = json({ error: "unauthorized" }, 401);
+    else if (!paidParentActive(family)) response = json({ error: "subscription_inactive", subscription_required: true }, 402);
     else {
       const deviceId = url.pathname.split("/")[4];
       const device = await env.DB.prepare(
@@ -176,6 +253,7 @@ async function handle(request, env) {
   } else if (url.pathname.startsWith("/v1/family/devices/") && url.pathname.endsWith("/revoke") && request.method === "POST") {
     const family = await parentAuth(request, env);
     if (!family) response = json({ error: "unauthorized" }, 401);
+    else if (!ownerOnly(family)) response = json({ error: "owner_required" }, 403);
     else {
       const deviceId = url.pathname.split("/")[4];
       const result = await env.DB.prepare(
