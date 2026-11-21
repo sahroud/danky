@@ -148,6 +148,24 @@ async function handle(request, env) {
       ).bind(family.id).all();
       response = json({ family: { id: family.id, parent_label: family.parent_label }, devices: result.results || [] });
     }
+  } else if (url.pathname.startsWith("/v1/family/devices/") && url.pathname.endsWith("/locations") && request.method === "GET") {
+    const family = await parentAuth(request, env);
+    if (!family) response = json({ error: "unauthorized" }, 401);
+    else {
+      const deviceId = url.pathname.split("/")[4];
+      const device = await env.DB.prepare(
+        "SELECT id, label FROM devices WHERE id = ? AND family_id = ?"
+      ).bind(deviceId, family.id).first();
+      if (!device) response = json({ error: "device_not_found" }, 404);
+      else {
+        const requested = Number(url.searchParams.get("limit") || 100);
+        const limit = Number.isFinite(requested) ? Math.max(1, Math.min(500, Math.floor(requested))) : 100;
+        const rows = await env.DB.prepare(
+          "SELECT latitude, longitude, accuracy_m, recorded_at, received_at FROM locations WHERE device_id = ? ORDER BY recorded_at DESC LIMIT ?"
+        ).bind(deviceId, limit).all();
+        response = json({ device, locations: rows.results || [] });
+      }
+    }
   } else if (url.pathname === "/v1/devices/sharing/stop" && request.method === "POST") {
     const device = await deviceAuth(request, env);
     if (!device) response = json({ error: "unauthorized" }, 401);
