@@ -24,6 +24,7 @@ import android.widget.TextView
 import android.widget.Toast
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Calendar
 import java.util.Locale
 
 class MainActivity : Activity() {
@@ -36,6 +37,7 @@ class MainActivity : Activity() {
     private lateinit var distanceText: TextView
     private lateinit var healthText: TextView
     private lateinit var waterText: TextView
+    private lateinit var reportText: TextView
     private var totalDistance = 0f
     private var routePoints = mutableListOf<String>()
     private var todaySteps = 0
@@ -117,7 +119,10 @@ class MainActivity : Activity() {
             prefs.edit().putInt("water_" + dayKey(), 0).apply()
             refreshHealth()
         })
-        root.addView(heading("۴) گزارش امروز"))
+        root.addView(heading("۴) گزارش روزانه و هفتگی"))
+        reportText = body("گزارش فعالیت هنوز آماده نیست.")
+        root.addView(reportText)
+        root.addView(action("به‌روزرسانی گزارش هفتگی") { refreshWeeklyReport() })
         root.addView(body("گام‌ها، مسافت GPS و آب مصرفی به‌صورت محلی روی همین گوشی ذخیره می‌شوند. این نسخه هنوز به سرور مرکزی یا گوشی اعضای خانواده ارسال نمی‌کند."))
         root.addView(body("هشدار: این برنامه ابزار تشخیص یا درمان پزشکی نیست. فشارخون و ضربان قلب را باید با دستگاه معتبر اندازه‌گیری و سپس دستی ثبت کنید."))
         setContentView(ScrollView(this).apply { addView(root) })
@@ -228,6 +233,30 @@ class MainActivity : Activity() {
         val progress = (todaySteps * 100 / 6000).coerceAtMost(100)
         val state = if (prefs.getBoolean("step_service_active", false)) "گام‌شمار پس‌زمینه: فعال" else "گام‌شمار پس‌زمینه: متوقف"
         stepsText.text = "گام امروز: $todaySteps\nپیشرفت هدف ۶۰۰۰ گام: $progress٪\nمسافت تقریبی بر اساس گام: ${formatDistance(todaySteps * 0.75f)}\n$state"
+        refreshWeeklyReport()
+    }
+
+    private fun refreshWeeklyReport() {
+        if (!::reportText.isInitialized) return
+        val cal = Calendar.getInstance()
+        val lines = mutableListOf<String>()
+        var total = 0
+        for (offset in 0..6) {
+            val day = cal.clone() as Calendar
+            day.add(Calendar.DAY_OF_YEAR, -offset)
+            val key = SimpleDateFormat("yyyyMMdd", Locale.US).format(day.time)
+            val value = if (key == dayKey()) prefs.getInt("today_steps", 0)
+                        else prefs.getInt("steps_$key", -1)
+            if (value >= 0) {
+                total += value
+                val label = SimpleDateFormat("yyyy/MM/dd", Locale.US).format(day.time)
+                lines.add("$label : $value گام")
+            } else {
+                val label = SimpleDateFormat("yyyy/MM/dd", Locale.US).format(day.time)
+                lines.add("$label : داده‌ای ثبت نشده")
+            }
+        }
+        reportText.text = "مجموع گام‌های ثبت‌شده در ۷ روز: $total\n" + lines.joinToString("\n")
     }
 
     private fun refreshHealth() {
