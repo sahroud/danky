@@ -89,6 +89,7 @@ class StepCounterService : Service(), SensorEventListener {
         }
         prefs.edit().putString("step_day", today).putFloat("step_last_sensor", raw)
             .putInt("step_boot_count", bootCount).putInt("today_steps", count)
+            .putInt("steps_$today", count)
             .putBoolean("step_service_active", true).apply()
         sendUpdate()
         updateNotification(count)
