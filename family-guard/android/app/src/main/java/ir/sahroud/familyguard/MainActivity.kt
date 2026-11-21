@@ -26,7 +26,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class MainActivity : Activity(), SensorEventListener {
+class MainActivity : Activity() {
     private val prefs by lazy { getSharedPreferences("sahroud_health", Context.MODE_PRIVATE) }
     private lateinit var sensorManager: SensorManager
     private var stepSensor: Sensor? = null
@@ -191,23 +191,6 @@ class MainActivity : Activity(), SensorEventListener {
         locationText.text = "مسیر پاک شد."
     }
 
-    private fun onSensorChangedLegacy(event: Any?) {
-        if (event?.sensor?.type != Sensor.TYPE_STEP_COUNTER) return
-        val totalSinceBoot = event.values[0]
-        val savedDay = prefs.getString("step_day", "")
-        if (savedDay != dayKey()) {
-            stepBase = totalSinceBoot
-            prefs.edit().putString("step_day", dayKey()).putFloat("step_base", stepBase).apply()
-        } else if (stepBase < 0f) {
-            stepBase = prefs.getFloat("step_base", totalSinceBoot)
-        }
-        todaySteps = (totalSinceBoot - stepBase).toInt().coerceAtLeast(0)
-        prefs.edit().putInt("today_steps", todaySteps).apply()
-        refreshStepsText()
-    }
-
-
-
     private fun startStepCounter() {
         if (stepSensor == null) {
             Toast.makeText(this, "حسگر سخت‌افزاری گام‌شمار در این گوشی موجود نیست.", Toast.LENGTH_LONG).show()
@@ -323,7 +306,6 @@ class MainActivity : Activity(), SensorEventListener {
 
     override fun onPause() {
         try { unregisterReceiver(locationReceiver) } catch (_: Exception) {}
-        sensorManager.unregisterListener(this)
         super.onPause()
     }
 
