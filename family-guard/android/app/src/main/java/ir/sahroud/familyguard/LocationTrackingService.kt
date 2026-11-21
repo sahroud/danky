@@ -20,6 +20,8 @@ import androidx.core.app.NotificationCompat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.Executors
+import org.json.JSONObject
 
 class LocationTrackingService : Service(), LocationListener {
     companion object {
@@ -34,6 +36,7 @@ class LocationTrackingService : Service(), LocationListener {
     private var previous: Location? = null
     private var totalDistance = 0f
     private val routePoints = mutableListOf<String>()
+    private val uploadExecutor = Executors.newSingleThreadExecutor()
 
     override fun onCreate() {
         super.onCreate()
@@ -86,7 +89,45 @@ class LocationTrackingService : Service(), LocationListener {
             .putString("last_lat", location.latitude.toString())
             .putString("last_lon", location.longitude.toString())
             .putString("last_location_time", time).putBoolean("tracking_active", true).apply()
+        uploadLocation(location)
         sendBroadcast(Intent(ACTION_LOCATION_UPDATE).setPackage(packageName))
+    }
+
+    private fun uploadLocation(location: Location) {
+        val secure = DeviceCredentials.get(this)
+        val token = secure.getString("device_token", null) ?: return
+        val api = prefs.getString("family_api_url", null) ?: return
+        uploadExecutor.execute {
+            var connection: java.net.HttpURLConnection? = null
+            try {
+                connection = (java.net.URL("$api/v1/location").openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 12000
+                    readTimeout = 12000
+                    doOutput = true
+                    setRequestProperty("Authorization", "Bearer $token")
+                    setRequestProperty("Content-Type", "application/json")
+                }
+                val payload = JSONObject()
+                    .put("latitude", location.latitude)
+                    .put("longitude", location.longitude)
+                    .put("accuracy_m", location.accuracy.toDouble())
+                    .put("recorded_at", java.time.Instant.ofEpochMilli(location.time).toString())
+                    .toString()
+                connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
+                val code = connection.responseCode
+                if (code in 200..299) {
+                    prefs.edit().putString("family_last_upload", Date().toString())
+                        .remove("family_upload_error").apply()
+                } else {
+                    prefs.edit().putString("family_upload_error", "HTTP $code").apply()
+                }
+            } catch (e: Exception) {
+                prefs.edit().putString("family_upload_error", e.javaClass.simpleName).apply()
+            } finally {
+                connection?.disconnect()
+            }
+        }
     }
 
     private fun stopTracking() {
@@ -125,6 +166,7 @@ class LocationTrackingService : Service(), LocationListener {
     override fun onDestroy() {
         try { locationManager.removeUpdates(this) } catch (_: Exception) {}
         prefs.edit().putBoolean("tracking_active", false).apply()
+        try { uploadExecutor.shutdown() } catch (_: Exception) {}
         super.onDestroy()
     }
 }
