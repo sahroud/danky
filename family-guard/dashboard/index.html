@@ -38,13 +38,26 @@ button:disabled{opacity:.5;cursor:not-allowed}
 </section>
 <section class="card hidden" id="familyCard">
 <h2>خانوادهٔ شما</h2><div id="familyInfo" class="status"></div>
-<button id="invite">ساخت کد اتصال عضو</button>
+<button id="invite">ساخت کد اتصال گوشی فرزند</button>
 <div id="inviteBox" class="hidden"><p>این کد را فقط در اختیار صاحب گوشی عضو قرار دهید. اعتبار: ۱۰ دقیقه و فقط یک‌بار.</p><div id="inviteCode" class="token"></div></div>
+<hr>
+<h2>افزودن والد دوم</h2>
+<p class="muted">والد دوم حساب و کلید مستقل دارد. پس از ثبت‌نام، برای مشاهده موقعیت‌ها باید اشتراک پولی جداگانه او فعال شود.</p>
+<button id="parentInvite" class="secondary">ساخت کد دعوت والد دوم</button>
+<div id="parentInviteBox" class="hidden"><p>کد را فقط به والد دوم بدهید. اعتبار ۱۰ دقیقه و یک‌بارمصرف است.</p><div id="parentInviteCode" class="token"></div></div>
 <button class="secondary" id="refresh">به‌روزرسانی فهرست اعضا</button>
 <div id="devices" class="status">هنوز اطلاعاتی دریافت نشده است.</div>
 </section>
 <section class="card">
-<h2>ورود مدیر خانواده</h2>
+<h2>ثبت‌نام والد دوم با کد دعوت</h2>
+<label for="secondParentName">نام والد دوم</label><input id="secondParentName" maxlength="80" placeholder="نام والد دوم">
+<label for="secondParentCode">کد دعوت والد دوم</label><input id="secondParentCode" maxlength="32" dir="ltr" placeholder="کد یک‌بارمصرف">
+<button id="acceptParent">ثبت‌نام والد دوم</button>
+<p class="muted">ثبت‌نام فقط با دعوت معتبر و تأیید آگاهانه انجام می‌شود. حساب والد دوم مستقل است و دسترسی مکانی آن تا فعال‌شدن اشتراک جداگانه محدود خواهد بود.</p>
+<div id="secondParentResult" class="status hidden"></div>
+</section>
+<section class="card">
+<h2>ورود والد / مدیر خانواده</h2>
 <label for="token">کلید محرمانه والد</label><input id="token" type="password" autocomplete="off" placeholder="کلید دریافتی هنگام ایجاد خانواده">
 <button id="connect" class="secondary">اتصال به خانواده</button>
 <p class="muted">کلید والد را در اختیار دیگران قرار ندهید. این نسخه آن را فقط در حافظه همین زبانه نگه می‌دارد و با بستن صفحه پاک می‌شود.</p>
@@ -81,14 +94,48 @@ $("connect").onclick = async () => {
   parentToken = $("token").value.trim();
   if (!parentToken) return say("کلید والد را وارد کنید.");
   try {
+    const subscription = await call("/v1/family/subscription");
+    if (subscription.role === "second_parent" && subscription.subscription_status !== "active") {
+      $("familyCard").classList.add("hidden");
+      $("createCard").classList.add("hidden");
+      say("حساب والد دوم شناسایی شد؛ اشتراک مستقل شما هنوز فعال نیست. برای مشاهده موقعیت اعضا باید اشتراک والد دوم خریداری و فعال شود.");
+      return;
+    }
     const data = await call("/v1/family/devices");
     familyId = data.family.id;
     $("familyCard").classList.remove("hidden");
     $("createCard").classList.add("hidden");
-    $("familyInfo").textContent = "خانواده: "+data.family.parent_label+"\nشناسه: "+familyId;
+    $("familyInfo").textContent = "خانواده: "+data.family.parent_label+"\nشناسه: "+familyId+"\nنقش: "+(subscription.role==="owner"?"والد اصلی":"والد دوم");
     renderDevices(data.devices);
     say("اتصال به پنل خانواده برقرار شد.");
   } catch(e) { parentToken=""; say("ورود ناموفق: "+e.message); }
+};
+$("parentInvite").onclick = async () => {
+  try {
+    const data = await call("/v1/parents/invite",{method:"POST",body:"{}"});
+    $("parentInviteCode").textContent = data.invite_code;
+    $("parentInviteBox").classList.remove("hidden");
+    say("کد دعوت والد دوم تا "+new Date(data.expires_at).toLocaleTimeString("fa-IR")+" معتبر است.");
+  } catch(e) { say("ساخت دعوت والد دوم ناموفق: "+e.message); }
+};
+$("acceptParent").onclick = async () => {
+  const box=$("secondParentResult");
+  try {
+    const response=await fetch(api()+"/v1/parents/accept",{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({
+        parent_label:$("secondParentName").value.trim(),
+        invite_code:$("secondParentCode").value.trim(),
+        consent:true
+      })
+    });
+    const data=await response.json().catch(()=>({error:"پاسخ نامعتبر سرور"}));
+    if(!response.ok) throw new Error(data.error||("HTTP "+response.status));
+    box.classList.remove("hidden");
+    box.textContent="حساب والد دوم ایجاد شد. وضعیت اشتراک: غیرفعال.\nکلید محرمانه والد دوم (فقط همین بار نمایش داده می‌شود):\n"+data.parent_token+"\nاین کلید را فقط خود والد دوم در محل امن نگهداری کند.";
+    $("secondParentCode").value="";
+    say("ثبت‌نام والد دوم انجام شد؛ دسترسی مکانی پس از فعال‌شدن اشتراک مستقل ممکن می‌شود.");
+  } catch(e) { say("ثبت‌نام والد دوم ناموفق: "+e.message); }
 };
 $("invite").onclick = async () => {
   try {
