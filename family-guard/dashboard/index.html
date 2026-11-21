@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#123b5d">
+<title>پنل والدین | SAHROUD FAMILY GUARD</title>
+<style>
+:root{font-family:Tahoma,Arial,sans-serif;color:#172b3a;background:#f2f6fa}
+*{box-sizing:border-box}body{margin:0}.top{background:#123b5d;color:#fff;padding:22px 16px}
+main{max-width:760px;margin:18px auto;padding:0 12px}.card{background:#fff;border:1px solid #dce5ed;border-radius:14px;padding:16px;margin:12px 0;box-shadow:0 3px 12px #17324d0a}
+h1{font-size:20px;margin:0 0 8px}h2{font-size:17px;margin:0 0 12px;color:#174b70}
+p{line-height:1.8;margin:8px 0}.muted{color:#627586;font-size:13px}
+label{display:block;margin:10px 0 5px;font-size:14px}
+input{width:100%;padding:12px;border:1px solid #bdcbd8;border-radius:9px;font:inherit}
+button{border:0;border-radius:9px;padding:12px 15px;font:inherit;cursor:pointer;background:#145b86;color:white;margin:8px 4px 0 0}
+button.secondary{background:#e8f0f6;color:#174b70}button.danger{background:#9e3030}
+button:disabled{opacity:.5;cursor:not-allowed}
+.notice{padding:11px;border-radius:9px;background:#fff5dc;color:#634b16;font-size:13px;line-height:1.8}
+.status{margin:10px 0;padding:10px;border-radius:8px;background:#edf4f8;white-space:pre-wrap;line-height:1.8}
+.device{border-top:1px solid #e5ebf0;padding:13px 0}.device:first-child{border-top:0}
+.token{direction:ltr;text-align:left;word-break:break-all;background:#f2f5f7;padding:10px;border-radius:8px;font-size:12px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<header class="top"><h1>SAHROUD FAMILY GUARD</h1><div>پنل مدیریت خانواده و مشاهدهٔ موقعیت اعضا</div></header>
+<main>
+<section class="card">
+<div class="notice">این پنل فقط موقعیت دستگاه‌هایی را نشان می‌دهد که با کد یک‌بارمصرف به خانواده پیوسته‌اند و صاحب دستگاه آگاهانه اشتراک‌گذاری را پذیرفته است. موقعیت قدیمی، موقعیت زنده محسوب نمی‌شود.</div>
+<label for="api">نشانی API سرور</label><input id="api" value="https://REPLACE-WITH-YOUR-WORKER.workers.dev" dir="ltr">
+<p class="muted">پس از راه‌اندازی سرور، نشانی Worker را اینجا وارد کنید.</p>
+</section>
+<section class="card" id="createCard">
+<h2>ایجاد خانواده</h2>
+<label for="parent">نام والد / مدیر خانواده</label><input id="parent" maxlength="80" placeholder="مثلاً مدیر خانواده">
+<button id="create">ایجاد خانواده</button>
+</section>
+<section class="card hidden" id="familyCard">
+<h2>خانوادهٔ شما</h2><div id="familyInfo" class="status"></div>
+<button id="invite">ساخت کد اتصال عضو</button>
+<div id="inviteBox" class="hidden"><p>این کد را فقط در اختیار صاحب گوشی عضو قرار دهید. اعتبار: ۱۰ دقیقه و فقط یک‌بار.</p><div id="inviteCode" class="token"></div></div>
+<button class="secondary" id="refresh">به‌روزرسانی فهرست اعضا</button>
+<div id="devices" class="status">هنوز اطلاعاتی دریافت نشده است.</div>
+</section>
+<section class="card">
+<h2>ورود مدیر خانواده</h2>
+<label for="token">کلید محرمانه والد</label><input id="token" type="password" autocomplete="off" placeholder="کلید دریافتی هنگام ایجاد خانواده">
+<button id="connect" class="secondary">اتصال به خانواده</button>
+<p class="muted">کلید والد را در اختیار دیگران قرار ندهید. این نسخه آن را فقط در حافظه همین زبانه نگه می‌دارد و با بستن صفحه پاک می‌شود.</p>
+</section>
+<div id="status" class="status" role="status">برای شروع، خانواده ایجاد کنید یا با کلید والد وارد شوید.</div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let parentToken = "";
+let familyId = "";
+const api = () => $("api").value.trim().replace(/\/$/,"");
+const say = message => $("status").textContent = message;
+async function call(path, options={}) {
+  const headers = {"content-type":"application/json", ...(options.headers||{})};
+  if (parentToken) headers.authorization = "Bearer " + parentToken;
+  const response = await fetch(api()+path,{...options,headers});
+  const data = await response.json().catch(()=>({error:"پاسخ نامعتبر سرور"}));
+  if (!response.ok) throw new Error(data.error || ("HTTP "+response.status));
+  return data;
+}
+$("create").onclick = async () => {
+  try {
+    const data = await call("/v1/families",{method:"POST",body:JSON.stringify({parent_label:$("parent").value.trim()})});
+    parentToken = data.parent_token; familyId = data.family_id;
+    $("token").value = parentToken;
+    $("familyCard").classList.remove("hidden");
+    $("createCard").classList.add("hidden");
+    $("familyInfo").textContent = "شناسه خانواده: "+familyId+"\nکلید والد در کادر ورود نمایش داده شده؛ آن را محرمانه نگه دارید.";
+    say("خانواده ایجاد شد. اکنون برای عضو موردنظر کد اتصال بسازید.");
+    await refreshDevices();
+  } catch(e) { say("خطا در ایجاد خانواده: "+e.message); }
+};
+$("connect").onclick = async () => {
+  parentToken = $("token").value.trim();
+  if (!parentToken) return say("کلید والد را وارد کنید.");
+  try {
+    const data = await call("/v1/family/devices");
+    familyId = data.family.id;
+    $("familyCard").classList.remove("hidden");
+    $("createCard").classList.add("hidden");
+    $("familyInfo").textContent = "خانواده: "+data.family.parent_label+"\nشناسه: "+familyId;
+    renderDevices(data.devices);
+    say("اتصال به پنل خانواده برقرار شد.");
+  } catch(e) { parentToken=""; say("ورود ناموفق: "+e.message); }
+};
+$("invite").onclick = async () => {
+  try {
+    const data = await call("/v1/invites",{method:"POST",body:"{}"});
+    $("inviteCode").textContent = data.invite_code;
+    $("inviteBox").classList.remove("hidden");
+    say("کد اتصال ساخته شد و تا "+new Date(data.expires_at).toLocaleTimeString("fa-IR")+" اعتبار دارد.");
+  } catch(e) { say("ساخت کد ناموفق: "+e.message); }
+};
+async function refreshDevices() {
+  const data = await call("/v1/family/devices");
+  renderDevices(data.devices);
+}
+function renderDevices(devices) {
+  const host=$("devices");
+  if(!devices.length){host.textContent="هنوز عضوی متصل نشده است.";return;}
+  host.innerHTML="";
+  devices.forEach(device=>{
+    const item=document.createElement("div");item.className="device";
+    const title=document.createElement("strong");title.textContent=device.label;
+    const info=document.createElement("p");
+    const state=device.sharing_enabled?"اشتراک‌گذاری فعال":"اشتراک‌گذاری متوقف یا لغو شده";
+    const recorded=device.location_recorded_at?new Date(device.location_recorded_at).toLocaleString("fa-IR"):"موقعیتی دریافت نشده";
+    const received=device.location_received_at?new Date(device.location_received_at).toLocaleString("fa-IR"):"—";
+    info.textContent=state+"\nآخرین ثبت روی گوشی: "+recorded+"\nدریافت سرور: "+received;
+    item.append(title,info);
+    if(device.latitude!==null && device.longitude!==null){
+      const map=document.createElement("a");map.href="https://www.openstreetmap.org/?mlat="+encodeURIComponent(device.latitude)+"&mlon="+encodeURIComponent(device.longitude)+"#map=16/"+device.latitude+"/"+device.longitude;
+      map.target="_blank";map.rel="noopener";map.textContent="نمایش آخرین موقعیت روی نقشه";
+      item.append(map);
+    }
+    if(device.sharing_enabled){
+      const stop=document.createElement("button");stop.className="danger";stop.textContent="لغو دسترسی این دستگاه";
+      stop.onclick=async()=>{if(!confirm("اشتراک‌گذاری موقعیت این دستگاه متوقف شود؟"))return;try{await call("/v1/family/devices/"+encodeURIComponent(device.id)+"/revoke",{method:"POST",body:"{}"});await refreshDevices();say("دسترسی دستگاه لغو شد.");}catch(e){say("خطا: "+e.message);}};
+      item.append(stop);
+    }
+    host.append(item);
+  });
+}
+$("refresh").onclick=async()=>{try{await refreshDevices();say("فهرست اعضا به‌روزرسانی شد.");}catch(e){say("خطا در دریافت اعضا: "+e.message);}};
+</script>
+</body></html>
