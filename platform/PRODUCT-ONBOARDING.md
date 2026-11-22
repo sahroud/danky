@@ -66,11 +66,19 @@
 - `GET /v1/catalog/products`
 - `GET /v1/catalog/products/{product_key}`
 
-نمونه درخواست:
+برای وب‌اپ‌ها از کتابخانه مشترک موجود در `platform/client/sahroud-central.js` استفاده کنید. این فایل فقط endpointهای عمومی را صدا می‌زند، HTTPS را اجباری می‌کند، cookie یا Secret نمی‌فرستد و روش‌های نوشتن/ورود ندارد.
 
-    const response = await fetch(CENTRAL_API_BASE + "/v1/catalog/products");
-    if (!response.ok) throw new Error("SAHROUD Central is unavailable");
-    const catalog = await response.json();
+نمونه اتصال پس از فراهم شدن API URL واقعی:
+
+    import { createSahroudCentralClient } from "./sahroud-central.js";
+    const central = createSahroudCentralClient({
+      apiBase: window.SAHROUD_CONFIG.centralApiBase
+    });
+    const catalog = await central.products();
+
+جزئیات و آزمون‌ها:
+- [راهنمای کلاینت مشترک](./client/README.md)
+- [آزمون کلاینت](./test/client.test.js)
 
 این مسیرها فقط داده عمومی کاتالوگ را می‌دهند. احراز هویت، مدیریت حساب، صدور مجوز و اشتراک هنوز فعال نیستند؛ هیچ محصولی نباید دسترسی تجاری را با پاسخ ساختگی یا کلید ثابت داخل برنامه فعال کند.
 
