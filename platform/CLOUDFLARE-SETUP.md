@@ -49,20 +49,10 @@ Worker name:
 مخزن:
 - `sahroud/danky`
 
-شاخه تولید:
-- `main`، پس از ادغام تغییرات بررسی‌شده
-
-مسیر پروژه:
-- Root directory: `/platform`
-
-تنظیم استقرار:
-- Build command: خالی
-- Deploy command: `npm run deploy`
-
 فایل پیکربندی:
 - `platform/wrangler.toml`
 
-در فایل پیکربندی، placeholder مربوط به `database_id` را با شناسه واقعی D1 مرکزی جایگزین کنید. Cloudflare Workers Builds از تنظیمات Root directory و Deploy command پشتیبانی می‌کند:
+در فایل پیکربندی، placeholder مربوط به `database_id` را با شناسه واقعی D1 مرکزی جایگزین کنید. Cloudflare Workers Builds این فایل را برای bindingها می‌خواند و تنظیمات Root directory و Deploy command را جداگانه در داشبورد می‌گیرد:
 https://developers.cloudflare.com/workers/ci-cd/builds/configuration/
 
 ## مرحله سوم — Workers Builds و استقرار کنترل‌شده
