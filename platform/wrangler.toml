@@ -7,7 +7,7 @@ workers_dev = true
 [[d1_databases]]
 binding = "CORE_DB"
 database_name = "sahroud-central"
-database_id = "REPLACE_WITH_CLOUDFLARE_D1_DATABASE_ID"
+database_id = "f4824106-b05c-4d15-b131-dd943b08ff14"
 migrations_dir = "migrations"
 
 [vars]
