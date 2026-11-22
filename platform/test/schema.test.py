@@ -1,10 +1,14 @@
 from pathlib import Path
 import sqlite3
 
-migration = Path(__file__).resolve().parents[1] / "migrations" / "0001_core.sql"
+migration_dir = Path(__file__).resolve().parents[1] / "migrations"
 connection = sqlite3.connect(":memory:")
 connection.execute("PRAGMA foreign_keys = ON")
-connection.executescript(migration.read_text(encoding="utf-8"))
+
+migration_files = sorted(migration_dir.glob("[0-9][0-9][0-9][0-9]_*.sql"))
+assert len(migration_files) >= 2, "Expected versioned core and portfolio migrations"
+for migration in migration_files:
+    connection.executescript(migration.read_text(encoding="utf-8"))
 
 tables = {
     row[0]
@@ -26,10 +30,30 @@ required = {
 }
 assert required.issubset(tables), f"Missing tables: {required - tables}"
 
+expected_products = {
+    "family-guard",
+    "steel",
+    "metreh",
+    "utm",
+    "tasbih",
+    "games",
+    "gps",
+    "rtk",
+    "earth",
+    "topography",
+    "rakat",
+    "counter",
+    "windows-doctor",
+}
 products = connection.execute(
     "SELECT product_key, lifecycle_status FROM products ORDER BY product_key"
 ).fetchall()
-assert len(products) == 6, f"Expected 6 seeded products, got {len(products)}"
+actual_product_keys = {key for key, _ in products}
+assert actual_product_keys == expected_products, (
+    f"Product catalog mismatch. Missing: {expected_products - actual_product_keys}; "
+    f"unexpected: {actual_product_keys - expected_products}"
+)
+assert len(products) == 13, f"Expected 13 registered products, got {len(products)}"
 assert all(status == "development" for _, status in products)
 
 # One principal can belong to more than one personal/organization account.
