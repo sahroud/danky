@@ -27,6 +27,7 @@
 - [قرارداد اتصال محصول جدید](./PRODUCT-ONBOARDING.md)
 - [مبانی امنیتی مشترک](./SECURITY-BASELINE.md)
 - [راهنمای راه‌اندازی هسته مرکزی](./CLOUDFLARE-SETUP.md)
+- [کتابخانه مشترک وب](./client/README.md)
 
 ## سیاست تخصیص منابع
 
@@ -55,8 +56,9 @@ API فعلی فقط خواندنی است. ورود کاربر، ایجاد حس
 ## ساختار پوشه
 
 - `src/index.js` — Worker مرکزی
+- `client/sahroud-central.js` — کتابخانه مشترک وب
 - `migrations/` — migrationهای نسخه‌دار D1
-- `test/worker.test.js` — آزمون API
+- `test/worker.test.js` و `test/client.test.js` — آزمون API و کلاینت
 - `test/schema.test.py` — اعتبارسنجی همه migrationها با SQLite
 - `wrangler.toml` — نام Worker، binding پایگاه داده و مسیر migration
 - `CLOUDFLARE-RESOURCE-MAP.md` — نقشه منابع مشترک
@@ -85,4 +87,3 @@ API فعلی فقط خواندنی است. ورود کاربر، ایجاد حس
 - CORS جایگزین احراز هویت نیست.
 - مجوزها باید در سمت Worker اعتبارسنجی شوند.
 - رهگیری مکان فقط با رضایت روشن و قابل لغو صاحب دستگاه مجاز است.
-
