@@ -1,6 +1,6 @@
 # فهرست رسمی محصولات SAHROUD
 
-این فایل مرجع یکتای شناسه‌ محصولات برای SAHROUD Central است. هر محصول فقط یک `product_key` ثابت دارد؛ آدرس‌های قدیمی یا نسخه‌های تکراری نباید به‌عنوان محصول یا دیتابیس جدید ثبت شوند.
+این فایل مرجع یکتای شناسه‌ محصولات برای SAHROUD Central است. هر محصول فقط یک `product_key` ثابت دارد؛ آدرس‌های قدیمی یا رابط‌های جایگزین نباید به‌عنوان محصول یا دیتابیس جدید ثبت شوند.
 
 ## محصولات شناسایی‌شده در مخازن فعلی
 
@@ -10,9 +10,9 @@
 | SAHROUD STEEL | `steel` | `sahroud/steel/steel2/` | engineering |
 | SAHROUD METREH | `metreh` | `sahroud/SAHROUD-METREH/` | construction |
 | SAHROUD UTM | `utm` | `sahroud/utm/` | surveying |
-| SAHROUD GPS | `gps` | `sahroud/A/index.html` | surveying |
-| SAHROUD RTK | `rtk` | `sahroud/utm/gps-rtk/` | surveying |
-| SAHROUD EARTH | `earth` | `sahroud/utm/earth/` | surveying |
+| SAHROUD GPS | `gps` | `sahroud/utm/` (نسخه جایگزین در `sahroud/A/index.html`) | surveying |
+| SAHROUD RTK | `rtk` | `sahroud/utm/gps-rtk/` (مسیر قدیمی در `sahroud/110/`) | surveying |
+| SAHROUD EARTH | `earth` | `sahroud/utm/earth/` (فایل قدیمی در `sahroud/A/SahroudEarth.html`) | surveying |
 | SAHROUD TOPOGRAPHY | `topography` | `sahroud/utm/topography/` | surveying |
 | SAHROUD TASBIH | `tasbih` | `sahroud/A/tasbih/` | utility |
 | SAHROUD RAKAT | `rakat` | `sahroud/A/rakat/` | utility |
@@ -24,9 +24,11 @@
 
 ## جلوگیری از ثبت تکراری
 
-- مخزن `sahroud/110` نسخه قدیمی مسیر RTK است؛ شناسه همان `rtk` باقی می‌ماند.
-- فایل قدیمی `sahroud/A/SahroudEarth.html` نسخه هم‌خانواده Earth است؛ شناسه همان `earth` است.
-- صفحات GPS در ریشه مخزن `A` و فایل‌های هم‌نام در مخزن `utm` یک شناسه `gps` دارند.
+- `sahroud/110/index.html` نسخه قدیمی مسیر RTK است؛ شناسه همان `rtk` باقی می‌ماند.
+- `sahroud/A/SahroudEarth.html` نسخه قدیمی/جایگزین Earth است؛ شناسه همان `earth` است.
+- صفحات GPS در `sahroud/A/index.html` و `sahroud/utm/index.html` عنوان و هدف مشترک دارند، اما SHA و اندازه فایل آن‌ها متفاوت است؛ آن‌ها را کپی بایت‌به‌بایت فرض نکنید. هر دو به شناسه `gps` تعلق دارند.
+- فایل Earth در مخزن A و صفحه `utm/earth/index.html` نیز SHA متفاوت دارند؛ همان شناسه محصول `earth` را استفاده می‌کنند.
+- نسخه‌های RTK در مخزن `110` و مسیر `utm/gps-rtk` نیز فایل‌های متفاوت‌اند؛ مسیر قدیمی را بدون برنامه مهاجرت حذف نکنید.
 - `sahroud/utm/apps/` صفحه فهرست/درگاه مجموعه نقشه‌برداری است، نه محصول عملیاتی جداگانه.
 - `sahroud/surveryRTK` در زمان بررسی فقط README داشت و به‌عنوان محصول مستقل ثبت نشده است.
 - فایل `sahroud/danky/index.html` عنوان Pro Camera HD دارد و در این فهرست محصولات SAHROUD ثبت نمی‌شود.
