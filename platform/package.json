@@ -1,13 +1,18 @@
 {
   "name": "sahroud-central",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply sahroud-central --local",
+    "db:migrate:remote": "wrangler d1 migrations apply sahroud-central --remote",
+    "db:migrations:remote": "wrangler d1 migrations list sahroud-central --remote"
   },
   "devDependencies": {
-    "wrangler": "^4.0.0"
+    "wrangler": "^4.36.0"
   },
   "engines": {
     "node": ">=20"

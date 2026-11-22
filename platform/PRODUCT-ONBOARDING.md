@@ -1,0 +1,85 @@
+# الگوی اتصال هر محصول SAHROUD
+
+این سند قرارداد لازم برای افزودن محصولات موجود و آینده به زیرساخت مرکزی است.
+
+## ۱. ثبت هویت محصول
+
+هر محصول یک product_key ثابت و یکتا دارد. کلید پس از انتشار نباید تغییر کند.
+
+| محصول | product_key | دسته |
+|---|---|---|
+| FAMILY GUARD | family-guard | safety |
+| STEEL | steel | engineering |
+| METREH | metreh | construction |
+| UTM | utm | surveying |
+| TASBIH | tasbih | utility |
+| GAMES | games | games |
+
+ثبت یا تغییر کاتالوگ از طریق migration جدید انجام می‌شود؛ فایل migration اجراشده را بازنویسی نکنید.
+
+## ۲. نام‌گذاری منابع
+
+برای محصول با کلید product، نام‌ها به این الگو هستند:
+
+- Worker اختصاصی: sahroud-product-api
+- D1 اختصاصی: sahroud-product
+- Pages پنل: sahroud-product-dashboard
+- فضای R2 در صورت نیاز: پیشوند product/account-id/
+
+استثنا: Worker و D1 مرکزی نام ثابت خود را دارند و با نام محصولات جایگزین نمی‌شوند.
+
+## ۳. مرزبندی داده‌ها
+
+در D1 مرکزی فقط داده مشترک حساب/هویت/عضویت/محصول/اشتراک/مجوز نگهداری می‌شود. جدول‌های مکان، پروژه، فایل‌های خصوصی، گزارش‌های سلامت یا اطلاعات عملیاتی هر محصول باید در منبع داده اختصاصی آن محصول بمانند.
+
+برای داده چندمستاجری، همه پرس‌وجوهای عملیاتی باید scope حساب/مالک داده را در سمت سرور اعمال کنند. شناسه‌ای که از مرورگر یا گوشی می‌آید به‌تنهایی مجوز دسترسی نیست.
+
+## ۴. اتصال کلاینت به کاتالوگ مرکزی
+
+آدرس API باید از تنظیمات محیطی برنامه دریافت شود؛ URL تولید را در چندین فایل یا نسخه اپ کپی نکنید.
+
+مسیرهای عمومی فعلی:
+- GET /health
+- GET /v1/version
+- GET /v1/catalog/products
+- GET /v1/catalog/products/{product_key}
+
+نمونه درخواست:
+    const response = await fetch(CENTRAL_API_BASE + "/v1/catalog/products");
+    if (!response.ok) throw new Error("SAHROUD Central is unavailable");
+    const catalog = await response.json();
+
+در نسخه فعلی، این مسیرها فقط داده عمومی کاتالوگ را می‌دهند. مسیرهای احراز هویت، مدیریت حساب، مجوز و اشتراک هنوز پیاده‌سازی نشده‌اند.
+
+## ۵. Cloudflare Pages و Workers در monorepo
+
+برای Worker:
+- Repository: sahroud/danky
+- Root directory: /platform یا پوشه اختصاصی همان Worker
+- Build command: خالی، مگر آنکه build خاصی لازم باشد
+- Deploy command: npm run deploy
+- Worker name: دقیقاً برابر name در فایل wrangler.toml همان پوشه باشد
+- فقط مسیرهای مرتبط همان Worker را در Build watch paths قرار دهید تا تغییر محصول دیگر باعث Deploy بی‌مورد نشود.
+
+برای Pages:
+- Repository: sahroud/danky
+- Root directory: / در حالت خروجی از پوشه ریشه مخزن
+- Build command: خالی برای پنل HTML ایستا
+- Build output directory: پوشه دقیق پنل محصول، برای مثال family-guard/dashboard
+- اگر Root directory را خود پوشه پنل گذاشتید، خروجی را . انتخاب کنید؛ دو روش را با هم ترکیب نکنید.
+
+## ۶. CORS و تنظیمات
+
+Origin دقیق هر پنل وب باید در CORS_ALLOWED_ORIGINS سرویس مربوطه ثبت شود. مقدار wildcard مجاز نیست. CORS جایگزین احراز هویت یا کنترل مجوز نیست. کلاینت بومی Android ممکن است Origin نداشته باشد؛ API باید توکن و مجوز واقعی را سمت سرور بررسی کند.
+
+## ۷. چک‌لیست پیش از تولید
+
+- شناسه محصول یکتا و ثبت‌شده باشد.
+- Worker و D1 اختصاصی محصول از مرکزی جدا باشند.
+- migration در محیط آزمایشی اجرا و تست شود.
+- secret در Variables & Secrets تنظیم شود، نه در Git و نه در HTML/JS سمت کاربر.
+- CORS با Origin واقعی محدود شود.
+- مالکیت حساب در تمام پرس‌وجوهای داده عملیاتی اعمال شود.
+- داده قدیمی/منقضی به‌عنوان داده زنده نمایش داده نشود.
+- توقف/لغو/حذف و سیاست نگهداری داده تعریف شود.
+- آزمون خودکار، آزمون دو دستگاه و آزمون بار متناسب با هدف انجام شود.

@@ -1,13 +1,4 @@
-const API_VERSION = "0.1.0";
-
-const PRODUCTS = Object.freeze([
-  { id: "family-guard", name: "SAHROUD FAMILY GUARD", category: "safety", status: "development" },
-  { id: "steel", name: "SAHROUD STEEL", category: "engineering", status: "development" },
-  { id: "metreh", name: "SAHROUD METREH", category: "construction", status: "development" },
-  { id: "utm", name: "SAHROUD UTM", category: "surveying", status: "development" },
-  { id: "tasbih", name: "SAHROUD TASBIH", category: "utility", status: "development" },
-  { id: "games", name: "SAHROUD GAMES", category: "games", status: "development" }
-]);
+const API_VERSION = "0.2.0";
 
 const json = (data, status = 200, headers = {}) =>
   new Response(JSON.stringify(data), {
@@ -17,6 +8,8 @@ const json = (data, status = 200, headers = {}) =>
       "cache-control": "no-store",
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
+      "x-frame-options": "DENY",
+      "permissions-policy": "camera=(), microphone=(), geolocation=()",
       ...headers
     }
   });
@@ -50,33 +43,107 @@ function withHeaders(response, extra = {}) {
   });
 }
 
+async function databaseHealth(env) {
+  if (!env?.CORE_DB) return "not_configured";
+  try {
+    const result = await env.CORE_DB.prepare("SELECT 1 AS ok").first();
+    return result?.ok === 1 ? "ok" : "error";
+  } catch {
+    return "error";
+  }
+}
+
+async function listProducts(env) {
+  if (!env?.CORE_DB) {
+    return json({ error: "core_database_not_configured" }, 503);
+  }
+
+  try {
+    const result = await env.CORE_DB.prepare(
+      "SELECT product_key, display_name, category, lifecycle_status FROM products WHERE lifecycle_status <> 'retired' ORDER BY display_name"
+    ).all();
+
+    const products = (result?.results || []).map(row => ({
+      id: row.product_key,
+      name: row.display_name,
+      category: row.category,
+      status: row.lifecycle_status
+    }));
+
+    return json({ products, count: products.length, api_version: API_VERSION });
+  } catch {
+    return json({ error: "catalog_unavailable" }, 503);
+  }
+}
+
+async function getProduct(env, productKey) {
+  if (!/^[a-z0-9-]{2,64}$/.test(productKey)) {
+    return json({ error: "invalid_product_key" }, 400);
+  }
+  if (!env?.CORE_DB) {
+    return json({ error: "core_database_not_configured" }, 503);
+  }
+
+  try {
+    const row = await env.CORE_DB.prepare(
+      "SELECT product_key, display_name, category, lifecycle_status FROM products WHERE product_key = ? AND lifecycle_status <> 'retired'"
+    ).bind(productKey).first();
+
+    if (!row) return json({ error: "product_not_found" }, 404);
+    return json({
+      product: {
+        id: row.product_key,
+        name: row.display_name,
+        category: row.category,
+        status: row.lifecycle_status
+      },
+      api_version: API_VERSION
+    });
+  } catch {
+    return json({ error: "catalog_unavailable" }, 503);
+  }
+}
+
 async function handle(request, env = {}) {
   const url = new URL(request.url);
   const origin = request.headers.get("Origin");
-  const allowed = allowedOrigins(env);
-  const hasOrigin = Boolean(origin);
-  const originAllowed = !hasOrigin || allowed.includes(origin);
+  const origins = allowedOrigins(env);
 
-  if (!originAllowed) {
-    return json({ error: "origin_not_allowed" }, 403);
+  if (origin && !origins.includes(origin)) {
+    return json({ error: "origin_not_allowed" }, 403, { vary: "Origin" });
   }
 
   if (request.method === "OPTIONS") {
-    if (!origin || !allowed.includes(origin)) {
-      return json({ error: "cors_origin_not_allowed" }, 403);
-    }
-    return new Response(null, { status: 204, headers: corsHeaders(request, env) });
+    if (!origin) return json({ error: "cors_origin_required" }, 400);
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders(request, env)
+    });
+  }
+
+  if (request.method !== "GET") {
+    return json({ error: "method_not_allowed" }, 405, { allow: "GET, OPTIONS" });
   }
 
   let response;
-  if (request.method !== "GET") {
-    response = json({ error: "method_not_allowed" }, 405, { allow: "GET, OPTIONS" });
-  } else if (url.pathname === "/health") {
-    response = json({ service: "SAHROUD CENTRAL API", status: "ok", version: API_VERSION });
+  if (url.pathname === "/health") {
+    const coreDb = await databaseHealth(env);
+    response = json({
+      service: "SAHROUD CENTRAL API",
+      status: coreDb === "ok" ? "ok" : "degraded",
+      version: API_VERSION,
+      dependencies: { core_db: coreDb }
+    });
   } else if (url.pathname === "/v1/version") {
-    response = json({ api_version: API_VERSION, service: "sahroud-central-api" });
+    response = json({
+      api_version: API_VERSION,
+      service: "sahroud-central-api"
+    });
   } else if (url.pathname === "/v1/catalog/products") {
-    response = json({ products: PRODUCTS, count: PRODUCTS.length });
+    response = await listProducts(env);
+  } else if (url.pathname.startsWith("/v1/catalog/products/")) {
+    const productKey = url.pathname.slice("/v1/catalog/products/".length);
+    response = await getProduct(env, productKey);
   } else {
     response = json({ error: "not_found" }, 404);
   }
@@ -92,4 +159,4 @@ export default {
   }
 };
 
-export { handle, PRODUCTS, API_VERSION };
+export { handle, API_VERSION, databaseHealth };
