@@ -20,6 +20,13 @@ def now():
 def code_context(text, match):
     before=text[max(0,match.start()-55):match.start()]
     after=text[match.end():min(len(text),match.end()+70)]
+    # Jacked-code shape: DK followed by exactly 3 or 4 letters/digits.
+    # Campaign wording may be on a separate line, so inspect a wider context.
+    around=text[max(0,match.start()-420):min(len(text),match.end()+420)]
+    is_jacked_shape=bool(re.fullmatch(r"DK[A-Z0-9]{3,4}",match.group(0).upper()))
+    jacked_signal=bool(re.search(r"جاکدی|جاکُدی|prize.?catcher|کدهای?\s+۵\s*یا\s*۶|کدهای?\s+5\s*یا\s*6",around,re.I))
+    if is_jacked_shape and jacked_signal:
+        return around
     before_signal=re.search(r"(?:کد(?:\s*(?:تخفیف|ارسال|یادت\s*نره))?|جاکدی|جاکُدی|coupon(?:\s*code)?|promo\s*code|discount\s*code)\s*[:：]?\s*$",before,re.I)
     after_signal=re.match(r"\s*(?:رو\s*توی\s*جاکدی|در\s*جاکدی|ارسال\s*رایگان|برای\s*خرید|کد\s*تخفیف)",after,re.I)
     if not (before_signal or after_signal):
