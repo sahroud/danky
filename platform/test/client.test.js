@@ -144,3 +144,19 @@ test("client rejects empty identity tokens before network access", async () => {
   const client = new SahroudCentralClient({ apiBase: "https://central.example" });
   assert.throws(() => client.authenticate(""), /identity_token_required/);
 });
+
+test("current user request forwards Firebase token in Authorization header", async () => {
+  let observed;
+  const client = new SahroudCentralClient({
+    apiBase: "https://central.example",
+    fetchImpl: async (url, options) => {
+      observed = { url, options };
+      return jsonResponse({ user: { principal_id: "p1" } });
+    }
+  });
+  const result = await client.me("header.payload.signature");
+  assert.equal(result.user.principal_id, "p1");
+  assert.equal(observed.url, "https://central.example/v1/me");
+  assert.equal(observed.options.headers.Authorization, "Bearer header.payload.signature");
+  assert.equal(observed.options.credentials, "omit");
+});
