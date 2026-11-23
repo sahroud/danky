@@ -12,5 +12,4 @@ migrations_dir = "migrations"
 
 [vars]
 # Exact browser origins separated by commas. Native mobile clients do not need CORS.
-# Replace empty value only after real Pages/custom-domain origins are verified.
-CORS_ALLOWED_ORIGINS = ""
+CORS_ALLOWED_ORIGINS = "https://sahroud.github.io"
