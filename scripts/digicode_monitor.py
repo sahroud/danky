@@ -1,109 +1,124 @@
 #!/usr/bin/env python3
-"""Monitor public Digikala campaign pages. Results are leads, never acceptance claims."""
-import html
-import json
-import os
-import re
+"""Public-source Digikala treasure-hunt monitor with bounded image OCR.
+Only fetches publicly accessible pages/images; never logs in or bypasses controls."""
+import html, json, os, re, subprocess, tempfile, time
 import urllib.request
 from datetime import datetime, timezone
+from html.parser import HTMLParser
+from urllib.parse import urljoin, urlparse
 
-SOURCES = [
-    ("کانال رسمی دیجی‌کالا", "https://t.me/s/digikalaofficialaccount"),
-    ("صفحه شکار گنج دیجی‌کالا", "https://www.digikala.com/landings/prize-catcher/"),
-    ("فهرست عمومی کدهای جاکدی (منبع غیردیجی‌کالا)", "https://www.1pro.ir/store/digikala/لیست-کد-های-جاکُدی-دیجیکالا/"),
-]
-CODE_RE = re.compile(r"\bDK[A-Z0-9]{3,4}\b", re.I)
-HINT_RE = re.compile(r"جاکدی|جاکُدی|کد تخفیف|شکار گنج|prize.?catcher", re.I)
-PERCENT_RE = re.compile(r"(\d{1,3})\s*٪|%\s*(\d{1,3})")
+UA = "Mozilla/5.0 (compatible; SAHROUD-DIGI-CODE/2.0; +https://github.com/sahroud/danky)"
+HUNT = "https://www.digikala.com/landings/prize-catcher/"
+TELEGRAM = "https://t.me/s/digikalaofficialaccount"
+CODE_RE = re.compile(r"\bDK[A-Z0-9]{3,8}\b", re.I)
+HINT_RE = re.compile(r"شکار\s*گنج|جاکدی|جاکُدی|prize.?catcher|کد\s*تخفیف", re.I)
+MAX_PAGES, MAX_IMAGES, MAX_BYTES = 12, 48, 2_500_000
 
-def now_iso():
+def now():
     return datetime.now(timezone.utc).isoformat()
 
-def get_page(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 SAHROUD-DIGI-CODE/1.1"})
-    with urllib.request.urlopen(req, timeout=25) as response:
-        return response.read(4_000_000).decode("utf-8", "replace")
+def get(url, limit=2_000_000):
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=18) as r:
+        return r.read(limit), r.headers.get("Content-Type", "")
 
-def plain(value):
-    value = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", value)
-    value = re.sub(r"(?s)<[^>]+>", " ", value)
-    return re.sub(r"\s+", " ", html.unescape(value)).strip()
+class Links(HTMLParser):
+    def __init__(self):
+        super().__init__(); self.hrefs=[]; self.images=[]
+    def handle_starttag(self, tag, attrs):
+        a=dict(attrs)
+        if tag == "a" and a.get("href"): self.hrefs.append(a["href"])
+        if tag in ("img","source"):
+            for k in ("src","data-src","data-original","srcset"):
+                v=a.get(k)
+                if v:
+                    self.images.extend(x.strip().split(" ")[0] for x in v.split(",") if x.strip())
+
+def allowed_page(url):
+    p=urlparse(url)
+    return p.scheme=="https" and (p.netloc=="www.digikala.com" or p.netloc=="digikala.com")
+
+def allowed_image(url):
+    p=urlparse(url)
+    return p.scheme=="https" and (p.netloc.endswith("digikala.com") or p.netloc.endswith("digikala.net") or p.netloc.endswith("torob.com") or p.netloc.endswith("t.me"))
 
 def main():
-    checked_at = now_iso()
-    found = {}
-    errors = []
+    checked=now()
     try:
-        with open("digicode/candidates.json", encoding="utf-8") as f:
-            previous = json.load(f)
-    except Exception:
-        previous = {}
-    previous_by_code = {x.get("code"): x for x in previous.get("candidates", []) if x.get("code")}
-
-    for label, url in SOURCES:
+        with open("digicode/candidates.json",encoding="utf-8") as f: previous=json.load(f)
+    except Exception: previous={}
+    old={x.get("code"):x for x in previous.get("candidates",[]) if x.get("code")}
+    pages=[(HUNT,"صفحه رسمی شکار گنج"),(TELEGRAM,"کانال عمومی دیجی‌کالا")]
+    visited=set(); images=[]; found={}; errors=[]
+    for url,label in pages:
         try:
-            raw = get_page(url)
-            text = plain(raw)
-            for match in CODE_RE.finditer(text):
-                start, end = max(0, match.start()-550), min(len(text), match.end()+550)
-                snippet = text[start:end]
-                if not HINT_RE.search(snippet):
-                    continue
-                code = match.group(0).upper()
-                percentages = [int(a or b) for a, b in PERCENT_RE.findall(snippet)]
-                discount = max((p for p in percentages if 0 < p <= 100), default=None)
-                # Prefer official-source evidence when the same code appears in several sources.
-                is_official = "رسمی" in label or "شکار گنج دیجی‌کالا" in label
-                candidate = {
-                    "code": code,
-                    "source_name": label,
-                    "source_url": url,
-                    "source_type": "official" if is_official else "public_unofficial",
-                    "discount_percent": discount,
-                    "status": "سرنخ؛ پذیرش در جاکدی هنوز آزمایش نشده",
-                    "seen_at": previous_by_code.get(code, {}).get("seen_at") or checked_at,
-                    "last_seen_at": checked_at,
-                    "excerpt": snippet[:520],
-                }
-                old = found.get(code)
-                if old is None or (is_official and old.get("source_type") != "official"):
-                    found[code] = candidate
-        except Exception as exc:
-            errors.append({"source": label, "error": str(exc)[:240]})
+            raw,_=get(url); body=raw.decode("utf-8","replace")
+            parser=Links(); parser.feed(body)
+            for src in parser.images:
+                u=urljoin(url,src)
+                if allowed_image(u): images.append((u,label,url))
+            for href in parser.hrefs:
+                u=urljoin(url,href).split("#")[0]
+                if allowed_page(u) and u not in visited and len(pages)<MAX_PAGES and ("/category-" in u or "/search/category" in u or "category" in u or "prize-catcher" in u):
+                    pages.append((u,"صفحه عمومی دسته‌بندی/کمپین"))
+            text=html.unescape(re.sub(r"<[^>]+>"," ",body))
+            if HINT_RE.search(text):
+                for code in CODE_RE.findall(text):
+                    found[code.upper()]={"code":code.upper(),"source_name":label,"source_url":url,"source_type":"official" if "دیجی‌کالا" in label else "public","discount_percent":None,"status":"سرنخ متنی؛ پذیرش هنوز آزمایش نشده","excerpt":text[max(0,text.upper().find(code.upper())-180):text.upper().find(code.upper())+220][:400]}
+        except Exception as e: errors.append({"source":label,"error":str(e)[:180]})
+    # Crawl a small, bounded number of public category pages and collect product images.
+    for url,label in pages[2:MAX_PAGES]:
+        if url in visited: continue
+        visited.add(url)
+        try:
+            raw,_=get(url); parser=Links(); parser.feed(raw.decode("utf-8","replace"))
+            for src in parser.images:
+                u=urljoin(url,src)
+                if allowed_image(u): images.append((u,label,url))
+            text=html.unescape(re.sub(r"<[^>]+>"," ",raw.decode("utf-8","replace")))
+            for code in CODE_RE.findall(text):
+                if HINT_RE.search(text[max(0,text.upper().find(code.upper())-160):text.upper().find(code.upper())+200]):
+                    found.setdefault(code.upper(),{"code":code.upper(),"source_name":label,"source_url":url,"source_type":"public","discount_percent":None,"status":"سرنخ متنی؛ نیازمند تأیید","excerpt":"کد در متن صفحه عمومی دیده شد."})
+        except Exception as e: errors.append({"source":url[:100],"error":str(e)[:160]})
+    # OCR only publicly linked images, with strict limits and a small request delay.
+    seen=set()
+    for img_url,label,page_url in images:
+        if len(seen)>=MAX_IMAGES: break
+        if img_url in seen: continue
+        seen.add(img_url)
+        try:
+            data,ctype=get(img_url,MAX_BYTES)
+            if len(data)<1500 or len(data)>=MAX_BYTES or (ctype and not ctype.startswith("image/")): continue
+            suffix=".jpg"
+            if "png" in ctype: suffix=".png"
+            elif "webp" in ctype: suffix=".webp"
+            with tempfile.NamedTemporaryFile(suffix=suffix) as tmp:
+                tmp.write(data); tmp.flush()
+                result=subprocess.run(["tesseract",tmp.name,"stdout","-l","eng"],capture_output=True,text=True,timeout=12)
+            ocr=result.stdout or ""
+            for code in CODE_RE.findall(ocr):
+                code=code.upper()
+                found.setdefault(code,{"code":code,"source_name":"OCR تصویر عمومی محصول/کمپین","source_url":page_url,"image_url":img_url,"source_type":"image_ocr","discount_percent":None,"status":"سرنخ استخراج‌شده از تصویر؛ حتماً در صفحه رسمی بررسی شود","excerpt":ocr[:300]})
+            time.sleep(.12)
+        except Exception:
+            continue
+    candidates=[]
+    for code,item in found.items():
+        prior=old.get(code,{})
+        item["seen_at"]=prior.get("seen_at") or checked
+        item["last_seen_at"]=checked
+        candidates.append(item)
+    # Retain older leads if sources temporarily fail; never promote them to verified.
+    if not candidates and errors:
+        candidates=[{**v,"status":"سرنخ قبلی؛ منبع این نوبت در دسترس نبود"} for v in old.values()]
+    candidates.sort(key=lambda x:(x.get("discount_percent") or 0),reverse=True)
+    output={"updated_at":now(),"last_checked_at":checked,"monitor_status":"ok" if not errors else ("partial" if candidates else "unavailable"),"scan_stats":{"pages_checked":len(visited)+2,"public_images_seen":len(seen),"ocr_enabled":True},"notice":"تمام موارد صرفاً سرنخ عمومی یا OCR هستند؛ هیچ‌کدام بدون آزمایش در صفحه رسمی تأییدشده نیستند.","candidates":candidates,"source_errors":errors}
+    os.makedirs("digicode",exist_ok=True)
+    with open("digicode/candidates.json","w",encoding="utf-8") as f: json.dump(output,f,ensure_ascii=False,indent=2)
+    summary=os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary,"a",encoding="utf-8") as f:
+            f.write(f"\n- بررسی: {checked}\n- صفحات: {output['scan_stats']['pages_checked']}\n- تصاویر OCR شده: {len(seen)}\n- سرنخ‌ها: {len(candidates)}\n- خطاها: {len(errors)}\n")
+    print(json.dumps({"checked_at":checked,"leads":len(candidates),"pages":output["scan_stats"]["pages_checked"],"images":len(seen),"errors":len(errors)},ensure_ascii=False))
 
-    if not found and errors and previous_by_code:
-        found = {code: {**item, "status": "سرنخ قبلی؛ این نوبت منبع قابل بررسی نبود"} for code, item in previous_by_code.items()}
-
-    candidates = sorted(found.values(), key=lambda x: (x.get("discount_percent") or 0), reverse=True)
-    def comparable(items):
-        keys = ("code", "source_name", "source_url", "source_type", "discount_percent", "status", "excerpt")
-        return sorted([{k: item.get(k) for k in keys} for item in items], key=lambda x: x["code"] or "")
-    data_changed = comparable(candidates) != comparable(previous.get("candidates", [])) or previous.get("source_errors", []) != errors
-    output = {
-        "updated_at": now_iso() if data_changed or not previous.get("updated_at") else previous["updated_at"],
-        "last_checked_at": checked_at,
-        "monitor_status": "ok" if found or not errors else "partial",
-        "notice": "کاندیداها سرنخ هستند؛ اعتبار و مقدار تخفیف فقط با آزمایش در جاکدی/صفحه رسمی مشخص می‌شود.",
-        "candidates": candidates,
-        "source_errors": errors,
-    }
-    with open("digicode/candidates.json", "w", encoding="utf-8") as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
-
-    summary = [
-        "## SAHROUD DIGI CODE — گزارش نوبت پایش",
-        f"- زمان آخرین بررسی (UTC): {checked_at}",
-        f"- وضعیت منابع: {output['monitor_status']}",
-        f"- تعداد سرنخ‌ها: {len(candidates)}",
-        f"- تغییر در گزارش کدها: {'بله' if data_changed else 'خیر'}",
-        f"- خطای منابع: {len(errors)}",
-        "- اعتبار کدها و درصد تخفیف باید در صفحه رسمی دیجی‌کالا آزمایش شود.",
-    ]
-    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if summary_path:
-        with open(summary_path, "a", encoding="utf-8") as f:
-            f.write("\n".join(summary) + "\n")
-    print(json.dumps({"checked_at": checked_at, "codes_found": len(candidates), "source_errors": len(errors), "data_changed": data_changed}, ensure_ascii=False))
-
-if __name__ == "__main__":
-    main()
+if __name__=="__main__": main()
