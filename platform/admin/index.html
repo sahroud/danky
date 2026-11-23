@@ -40,19 +40,19 @@ footer{text-align:center;color:#88a7b8;font-size:11px;line-height:1.9;padding:22
 <div id="toast" role="status" aria-live="polite"></div>
 <script>
 const entries = [
- {url:"https://sahroud.github.io/danky/family-guard/",icon:"⌖"},
- {url:"https://sahroud.github.io/steel/steel2/",icon:"▦"},
- {url:"https://sahroud.github.io/SAHROUD-METREH/",icon:"▤"},
- {url:"https://sahroud.github.io/utm/",icon:"⌖"},
- {url:"https://sahroud.github.io/A/",icon:"◎"},
- {url:"https://sahroud.github.io/utm/gps-rtk/",icon:"⌁"},
- {url:"https://sahroud.github.io/utm/earth/",icon:"◉"},
- {url:"https://sahroud.github.io/utm/topography/",icon:"⌁"},
- {url:"https://sahroud.github.io/A/tasbih/",icon:"☾"},
- {url:"https://sahroud.github.io/A/rakat/",icon:"◌"},
- {url:"https://sahroud.github.io/A/counter/",icon:"＃"},
- {url:"https://sahroud.github.io/A/games/",icon:"◇"},
- {url:"https://sahroud.github.io/A/windows-doctor/",icon:"⚙"}
+ {name:"SAHROUD FAMILY GUARD",url:"https://sahroud.github.io/danky/family-guard/",icon:"🛡️"},
+ {name:"SAHROUD STEEL",url:"https://sahroud.github.io/steel/steel2/",icon:"🏗️"},
+ {name:"SAHROUD METREH",url:"https://sahroud.github.io/SAHROUD-METREH/",icon:"📐"},
+ {name:"SAHROUD UTM",url:"https://sahroud.github.io/utm/",icon:"🧭"},
+ {name:"SAHROUD GPS",url:"https://sahroud.github.io/utm/",icon:"📍"},
+ {name:"SAHROUD RTK",url:"https://sahroud.github.io/utm/gps-rtk/",icon:"📡"},
+ {name:"SAHROUD EARTH",url:"https://sahroud.github.io/utm/earth/",icon:"🌍"},
+ {name:"SAHROUD TOPOGRAPHY",url:"https://sahroud.github.io/utm/topography/",icon:"⛰️"},
+ {name:"SAHROUD TASBIH",url:"https://sahroud.github.io/A/tasbih/",icon:"📿"},
+ {name:"SAHROUD RAKAT",url:"https://sahroud.github.io/A/rakat/",icon:"🕌"},
+ {name:"SAHROUD COUNTER",url:"https://sahroud.github.io/A/counter/",icon:"🔢"},
+ {name:"SAHROUD GAMES",url:"https://sahroud.github.io/A/games/",icon:"🎮"},
+ {name:"SAHROUD WINDOWS DOCTOR",url:"https://sahroud.github.io/A/windows-doctor/",icon:"🩺"}
 ];
 const root=document.getElementById("apps");
 const toast=document.getElementById("toast");
@@ -62,7 +62,7 @@ entries.forEach((entry,index)=>{
  const card=document.createElement("article");card.className="item";
  const top=document.createElement("div");top.className="top";
  const symbol=document.createElement("div");symbol.className="symbol";symbol.setAttribute("aria-hidden","true");symbol.textContent=entry.icon;
- const hint=document.createElement("div");hint.className="hint";hint.textContent="دسترسی شماره "+(index+1);
+ const hint=document.createElement("div");hint.className="hint";hint.textContent=entry.name;
  top.append(symbol,hint);
  const open=document.createElement("button");open.className="open";open.textContent="ورود";open.type="button";open.addEventListener("click",()=>window.open(entry.url,"_blank","noopener"));
  const share=document.createElement("button");share.className="share";share.textContent="ارسال";share.type="button";
