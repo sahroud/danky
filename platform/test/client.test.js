@@ -120,3 +120,27 @@ test("invalid JSON and network failures are normalized", async () => {
     !error.message.includes("private network detail")
   );
 });
+
+test("client sends Firebase ID token only in Authorization header", async () => {
+  let observed;
+  const client = new SahroudCentralClient({
+    apiBase: "https://central.example",
+    fetchImpl: async (url, options) => {
+      observed = { url, options };
+      return jsonResponse({ authenticated: true, principal_id: "p1" });
+    }
+  });
+  const result = await client.authenticate("header.payload.signature");
+  assert.equal(result.authenticated, true);
+  assert.equal(observed.url, "https://central.example/v1/auth/session");
+  assert.equal(observed.options.method, "POST");
+  assert.equal(observed.options.headers.Authorization, "Bearer header.payload.signature");
+  assert.equal(observed.options.credentials, "omit");
+  assert.equal(observed.options.cache, "no-store");
+  assert.equal("body" in observed.options, false);
+});
+
+test("client rejects empty identity tokens before network access", async () => {
+  const client = new SahroudCentralClient({ apiBase: "https://central.example" });
+  assert.throws(() => client.authenticate(""), /identity_token_required/);
+});
