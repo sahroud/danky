@@ -106,7 +106,7 @@ test("unknown routes return 404", async () => {
 test("write methods are disabled until authentication and authorization are designed", async () => {
   const response = await worker.fetch(request("/v1/catalog/products", { method: "POST" }), {});
   assert.equal(response.status, 405);
-  assert.equal(response.headers.get("allow"), "GET, OPTIONS");
+  assert.equal(response.headers.get("allow"), "GET, POST, OPTIONS");
 });
 
 test("unlisted browser origins are rejected", async () => {
@@ -149,4 +149,41 @@ test("native requests without an Origin header remain supported", async () => {
   const response = await worker.fetch(request("/v1/version"), {});
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("access-control-allow-origin"), null);
+});
+
+test("auth session is disabled until Firebase project is configured", async () => {
+  const response = await worker.fetch(request("/v1/auth/session", { method: "POST" }), {});
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error, "auth_not_configured");
+});
+
+test("auth session requires a bearer identity token", async () => {
+  const response = await worker.fetch(request("/v1/auth/session", { method: "POST" }), {
+    FIREBASE_PROJECT_ID: "sahroud-central-test"
+  });
+  assert.equal(response.status, 401);
+  assert.equal((await response.json()).error, "authentication_required");
+});
+
+test("current user endpoint requires a bearer identity token", async () => {
+  const response = await worker.fetch(request("/v1/me"), {
+    FIREBASE_PROJECT_ID: "sahroud-central-test",
+    CORE_DB: mockDatabase()
+  });
+  assert.equal(response.status, 401);
+  assert.equal((await response.json()).error, "authentication_required");
+});
+
+test("CORS advertises POST for Firebase authentication", async () => {
+  const response = await worker.fetch(request("/v1/auth/session", {
+    method: "OPTIONS",
+    headers: {
+      Origin: "https://app.sahroud.example",
+      "Access-Control-Request-Method": "POST",
+      "Access-Control-Request-Headers": "authorization"
+    }
+  }), { CORS_ALLOWED_ORIGINS: "https://app.sahroud.example" });
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get("access-control-allow-methods"), "GET, POST, OPTIONS");
+  assert.equal(response.headers.get("access-control-allow-headers"), "Content-Type, Authorization");
 });
