@@ -27,6 +27,7 @@
 - [قرارداد اتصال محصول جدید](./PRODUCT-ONBOARDING.md)
 - [مبانی امنیتی مشترک](./SECURITY-BASELINE.md)
 - [راهنمای راه‌اندازی هسته مرکزی](./CLOUDFLARE-SETUP.md)
+- [وضعیت استقرار و آزمون‌های تأییدشده](./DEPLOYMENT-STATUS.md)
 - [کتابخانه مشترک وب](./client/README.md)
 
 ## سیاست تخصیص منابع
