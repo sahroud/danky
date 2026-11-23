@@ -142,7 +142,7 @@ test("client sends Firebase ID token only in Authorization header", async () => 
 
 test("client rejects empty identity tokens before network access", async () => {
   const client = new SahroudCentralClient({ apiBase: "https://central.example" });
-  assert.throws(() => client.authenticate(""), /identity_token_required/);
+  await assert.rejects(client.authenticate(""), /identity_token_required/);
 });
 
 test("current user request forwards Firebase token in Authorization header", async () => {
