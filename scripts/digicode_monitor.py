@@ -65,9 +65,11 @@ def main():
                 if allowed_page(u) and u not in {p[0] for p in pages} and len(pages)<MAX_PAGES:
                     pages.append((u,"صفحه عمومی محصول" if "/product/" in urlparse(u).path else "صفحه عمومی دسته‌بندی/کمپین"))
             text=html.unescape(re.sub(r"<[^>]+>"," ",body))
-            if HINT_RE.search(text):
-                for code in CODE_RE.findall(text):
-                    found[code.upper()]={"code":code.upper(),"source_name":label,"source_url":url,"source_type":"official" if "دیجی‌کالا" in label else "public","discount_percent":None,"status":"سرنخ متنی؛ پذیرش هنوز آزمایش نشده","excerpt":text[max(0,text.upper().find(code.upper())-180):text.upper().find(code.upper())+220][:400]}
+            for code in CODE_RE.findall(text):
+                pos=text.upper().find(code.upper())
+                context=text[max(0,pos-180):pos+220]
+                if HINT_RE.search(context):
+                    found[code.upper()]={"code":code.upper(),"source_name":label,"source_url":url,"source_type":"official" if "دیجی‌کالا" in label else "public","discount_percent":None,"status":"کد احتمالی؛ پذیرش هنوز آزمایش نشده","excerpt":context[:400]}
         except Exception as e: errors.append({"source":label,"error":str(e)[:180]})
     # Crawl a small, bounded number of public category pages and collect product images.
     idx=2
@@ -107,7 +109,10 @@ def main():
             if result.returncode==0: ocr_count+=1
             for code in CODE_RE.findall(ocr):
                 code=code.upper()
-                found.setdefault(code,{"code":code,"source_name":"OCR تصویر عمومی محصول/کمپین","source_url":page_url,"image_url":img_url,"source_type":"image_ocr","discount_percent":None,"status":"سرنخ استخراج‌شده از تصویر؛ حتماً در صفحه رسمی بررسی شود","excerpt":ocr[:300]})
+                pos=ocr.upper().find(code)
+                context=ocr[max(0,pos-100):pos+140]
+                if HINT_RE.search(context):
+                    found.setdefault(code,{"code":code,"source_name":"OCR تصویر عمومی دیجی‌کالا","source_url":page_url,"image_url":img_url,"source_type":"image_ocr","discount_percent":None,"status":"کد احتمالی استخراج‌شده از تصویر؛ نیازمند آزمایش","excerpt":context[:300]})
             time.sleep(.12)
         except Exception:
             continue
