@@ -17,6 +17,15 @@ MAX_PAGES, MAX_IMAGES, MAX_BYTES = 24, 120, 3_000_000
 def now():
     return datetime.now(timezone.utc).isoformat()
 
+def code_context(text, match):
+    before=text[max(0,match.start()-55):match.start()]
+    after=text[match.end():min(len(text),match.end()+70)]
+    before_signal=re.search(r"(?:کد(?:\s*(?:تخفیف|ارسال|یادت\s*نره))?|جاکدی|جاکُدی|coupon(?:\s*code)?|promo\s*code|discount\s*code)\s*[:：]?\s*$",before,re.I)
+    after_signal=re.match(r"\s*(?:رو\s*توی\s*جاکدی|در\s*جاکدی|ارسال\s*رایگان|برای\s*خرید|کد\s*تخفیف)",after,re.I)
+    if not (before_signal or after_signal):
+        return None
+    return text[max(0,match.start()-180):min(len(text),match.end()+180)]
+
 def get(url, limit=2_000_000):
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     with urllib.request.urlopen(req, timeout=18) as r:
@@ -67,9 +76,8 @@ def main():
             text=html.unescape(re.sub(r"<[^>]+>"," ",body))
             for match in CODE_RE.finditer(text):
                 code=match.group(0).upper()
-                pos=match.start()
-                context=text[max(0,pos-220):min(len(text),pos+260)]
-                if HINT_RE.search(context):
+                context=code_context(text,match)
+                if context:
                     if re.search(r"جاکدی|جاکُدی",context,re.I):
                         code_type="کد جاکدی"
                     elif re.search(r"ارسال\s*رایگان",context):
@@ -94,8 +102,8 @@ def main():
             text=html.unescape(re.sub(r"<[^>]+>"," ",raw.decode("utf-8","replace")))
             for match in CODE_RE.finditer(text):
                 code=match.group(0).upper()
-                context=text[max(0,match.start()-200):min(len(text),match.end()+220)]
-                if HINT_RE.search(context):
+                context=code_context(text,match)
+                if context:
                     if re.search(r"جاکدی|جاکُدی",context,re.I): code_type="کد جاکدی"
                     elif re.search(r"ارسال\s*رایگان",context): code_type="کد ارسال رایگان"
                     elif re.search(r"دیجی\s*پی|پرداخت\s*اعتباری",context): code_type="کد پرداخت اعتباری"
@@ -124,8 +132,8 @@ def main():
             if result.returncode==0: ocr_count+=1
             for match in CODE_RE.finditer(ocr):
                 code=match.group(0).upper()
-                context=ocr[max(0,match.start()-120):min(len(ocr),match.end()+160)]
-                if HINT_RE.search(context):
+                context=code_context(ocr,match)
+                if context:
                     if re.search(r"جاکدی|جاکُدی",context,re.I): code_type="کد جاکدی"
                     elif re.search(r"ارسال\s*رایگان",context): code_type="کد ارسال رایگان"
                     elif re.search(r"دیجی\s*پی|پرداخت\s*اعتباری",context): code_type="کد پرداخت اعتباری"
