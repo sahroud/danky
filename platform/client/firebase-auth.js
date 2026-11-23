@@ -74,7 +74,7 @@ export function createSahroudFirebaseAuth({
 
     async sendPhoneCodeToLinkCurrentUser(phoneNumber, containerId = "sahroud-recaptcha") {
       if (!auth.currentUser) throw new Error("sign_in_required_before_linking");
-      if (typeof phoneNumber !== "string" || !/^\\+[1-9]\\d{7,14}$/.test(phoneNumber)) {
+      if (typeof phoneNumber !== "string" || !/^\+[1-9]\d{7,14}$/.test(phoneNumber)) {
         throw new TypeError("phone_number_must_be_e164");
       }
       if (recaptchaVerifier) {
