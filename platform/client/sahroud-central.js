@@ -48,6 +48,50 @@ export class SahroudCentralClient {
     this.fetchImpl = fetchImpl;
   }
 
+  async post(path, { token, signal } = {}) {
+    if (typeof token !== "string" || !token || token.length > 8192) {
+      throw new TypeError("identity_token_required");
+    }
+    let response;
+    try {
+      response = await this.fetchImpl(this.apiBase + path, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: "Bearer " + token
+        },
+        cache: "no-store",
+        credentials: "omit",
+        redirect: "error",
+        signal
+      });
+    } catch {
+      throw new SahroudCentralError("network_error");
+    }
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      throw new SahroudCentralError("invalid_json_response", response.status);
+    }
+    if (!response.ok) {
+      const code = typeof data?.error === "string" ? data.error : "http_error";
+      throw new SahroudCentralError(code, response.status);
+    }
+    return data;
+  }
+
+  authenticate(token, options = {}) {
+    return this.post("/v1/auth/session", { token, ...options });
+  }
+
+  me(token, options = {}) {
+    return this.get("/v1/me", {
+      ...options,
+      headers: { Authorization: "Bearer " + token }
+    });
+  }
+
   async get(path, { signal } = {}) {
     let response;
     try {
