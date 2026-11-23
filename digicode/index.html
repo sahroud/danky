@@ -39,6 +39,13 @@ footer{font-size:11px;color:var(--muted);text-align:center;margin-top:22px}
 <label>لینک یا منبع انتشار</label><input id="source" placeholder="نشانی صفحه یا توضیح منبع" dir="ltr">
 <div class="row"><button id="addBtn">ثبت کد در فهرست</button><button class="secondary" id="openHunt">بازکردن صفحه شکار گنج</button></div>
 </section>
+<section class="card">
+<h2>نتایج پایش خودکار منابع عمومی</h2>
+<p class="small">گزارش از کانال عمومی رسمی دیجی‌کالا و صفحه شکار گنج دریافت می‌شود. کدهای این قسمت «سرنخ» هستند و تا آزمایش در جاکدی، معتبر یا دارای تخفیف مشخص محسوب نمی‌شوند.</p>
+<button id="refreshCandidates">دریافت آخرین نتایج پایش</button>
+<div id="candidateStatus" class="small" style="margin-top:8px">برای دریافت گزارش، دکمه را بزنید.</div>
+<div id="candidateList"></div>
+</section>
 <section class="card"><h2>کدهای ثبت‌شده — اولویت با بیشترین تخفیف</h2><div id="list" class="small">هنوز کدی ثبت نشده است.</div></section>
 <section class="card">
 <h2>جست‌وجوی منابع</h2><div class="row">
@@ -58,6 +65,7 @@ function render(){entries.sort((a,b)=>b.discount-a.discount);$('total').textCont
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 window.copyCode=id=>{let x=entries.find(e=>e.id===id);if(!x)return;window.open(HUNT,'_blank');if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(x.code).then(()=>$('status').textContent='کد '+x.code+' کپی شد؛ در صفحه بازشده محل درج کد را پیدا و Paste کنید.').catch(()=>$('status').textContent='صفحه جاکدی باز شد؛ کد '+x.code+' را دستی کپی کنید.')}else{$('status').textContent='صفحه جاکدی باز شد؛ کد '+x.code+' را دستی کپی کنید.'}};
 window.markUsed=id=>{let x=entries.find(e=>e.id===id);if(!x)return;let v=prompt('نتیجه ثبت کد را وارد کنید: پذیرفته شد / رد شد / منقضی');if(v){x.status=v;save()}};
+async function refreshCandidates(){const box=$('candidateList'),status=$('candidateStatus');status.textContent='در حال دریافت گزارش...';try{const res=await fetch('./candidates.json?ts='+Date.now(),{cache:'no-store'});if(!res.ok)throw new Error('HTTP '+res.status);const data=await res.json();const items=Array.isArray(data.candidates)?data.candidates:[];status.textContent='آخرین بررسی: '+(data.updated_at?new Date(data.updated_at).toLocaleString('fa-IR'):'هنوز اجرا نشده')+' · '+items.length+' سرنخ';if(!items.length){box.textContent='در این گزارش کدی پیدا نشد. '+(data.notice||'');return}const seen=JSON.parse(localStorage.getItem('sdc_seen_candidates')||'[]');const fresh=items.filter(x=>!seen.includes(x.code));box.innerHTML=items.map(x=>'<div class="item"><div class="itemtop"><b class="code">'+escapeHtml(x.code)+'</b><span class="pill">'+(x.discount_percent?x.discount_percent+'٪ اعلام‌شده':'درصد نامشخص')+'</span></div><div class="small">'+escapeHtml(x.source_name||'منبع عمومی')+' · '+escapeHtml(x.status||'نیازمند بررسی')+'</div><div class="small">'+escapeHtml(x.excerpt||'')+'</div><div class="row" style="margin-top:8px"><button onclick="copyCandidate(\''+escapeHtml(x.code)+'\')">کپی کد و بازکردن جاکدی</button><button class="secondary" onclick="window.open(\''+encodeURI(x.source_url||HUNT)+'\',\'_blank\')">مشاهده منبع</button></div></div>').join('');if(fresh.length){localStorage.setItem('sdc_seen_candidates',JSON.stringify([...seen,...fresh.map(x=>x.code)]));ring();if('Notification'in window&&Notification.permission==='granted'&&!inQuiet())new Notification('سرنخ تازه دیجی‌کالا',{body:fresh.map(x=>x.code).join('، ')})}}catch(e){status.textContent='گزارش هنوز در دسترس نیست؛ ممکن است پایش GitHub Actions هنوز اجرا نشده باشد. ('+e.message+')';box.textContent=''}}window.copyCandidate=code=>{window.open(HUNT,'_blank');if(navigator.clipboard?.writeText)navigator.clipboard.writeText(code).then(()=>$('candidateStatus').textContent='کد '+code+' کپی شد؛ در جاکدی Paste کنید.').catch(()=>$('candidateStatus').textContent='کد '+code+' را دستی کپی کنید.');else $('candidateStatus').textContent='کد '+code+' را دستی کپی کنید.'};$('refreshCandidates').onclick=refreshCandidates;
 $('addBtn').onclick=()=>{let code=$('code').value.trim().toUpperCase(),d=Number($('discount').value);if(!/^[A-Z0-9_-]{3,30}$/.test(code)||!Number.isFinite(d)||d<=80||d>100){$('status').textContent='کد و تخفیف بیشتر از ۸۰٪ را وارد کنید.';return}entries.push({id:Date.now().toString(),code,discount:d,kind:$('kind').value,source:$('source').value.trim(),status:'تأییدنشده؛ نیازمند آزمایش در دیجی‌کالا',created:Date.now()});save();$('code').value='';$('discount').value='';$('source').value='';ring();$('status').textContent='کد ثبت شد؛ هنوز واقعی یا برنده بودن آن تأیید نشده است.'};
 $('saveSettings').onclick=()=>{$('status').textContent='ساعات سکوت ذخیره شد.';localStorage.setItem('sdc_quiet',JSON.stringify({s:$('quietStart').value,e:$('quietEnd').value,on:$('soundOn').checked}))};
 $('testSound').onclick=()=>ring();
@@ -67,5 +75,5 @@ $('searchBtn').onclick=()=>{window.open('https://www.google.com/search?q='+encod
 $('openHunt').onclick=$('official').onclick=()=>window.open(HUNT,'_blank');
 $('searchWeb').onclick=()=>window.open('https://www.google.com/search?q='+encodeURIComponent('کد جدید شکار گنج دیجی کالا امروز'),'_blank');
 let q=JSON.parse(localStorage.getItem('sdc_quiet')||'null');if(q){$('quietStart').value=q.s;$('quietEnd').value=q.e;$('soundOn').checked=q.on}
-render();tick();setInterval(tick,1000);
+render();tick();setInterval(tick,1000);refreshCandidates();
 </script></body></html>
