@@ -1,0 +1,29 @@
+name: SAHROUD DIGI CODE monitor
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+permissions:
+  contents: write
+concurrency:
+  group: digicode-monitor
+  cancel-in-progress: true
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Scan public campaign sources
+        run: python scripts/digicode_monitor.py
+      - name: Publish scan results
+        run: |
+          if ! git diff --quiet -- digicode/candidates.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add digicode/candidates.json
+            git commit -m "Update Digi Code monitor results"
+            git push
+          fi
