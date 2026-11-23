@@ -10,6 +10,8 @@ export function createSahroudFirebaseAuth({
   signInWithPopup,
   RecaptchaVerifier,
   signInWithPhoneNumber,
+  linkWithPopup,
+  linkWithPhoneNumber,
   centralClient
 } = {}) {
   if (!auth || !centralClient || typeof centralClient.authenticate !== "function") {
@@ -19,7 +21,9 @@ export function createSahroudFirebaseAuth({
     typeof GoogleAuthProvider !== "function" ||
     typeof signInWithPopup !== "function" ||
     typeof RecaptchaVerifier !== "function" ||
-    typeof signInWithPhoneNumber !== "function"
+    typeof signInWithPhoneNumber !== "function" ||
+    typeof linkWithPopup !== "function" ||
+    typeof linkWithPhoneNumber !== "function"
   ) {
     throw new TypeError("firebase_auth_sdk_functions_required");
   }
@@ -43,6 +47,14 @@ export function createSahroudFirebaseAuth({
       return finishSignIn(result.user);
     },
 
+    async linkGoogleToCurrentUser() {
+      if (!auth.currentUser) throw new Error("sign_in_required_before_linking");
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters?.({ prompt: "select_account" });
+      const result = await linkWithPopup(auth.currentUser, provider);
+      return finishSignIn(result.user);
+    },
+
     async sendPhoneCode(phoneNumber, containerId = "sahroud-recaptcha") {
       if (typeof phoneNumber !== "string" || !/^\+[1-9]\d{7,14}$/.test(phoneNumber)) {
         throw new TypeError("phone_number_must_be_e164");
@@ -54,6 +66,24 @@ export function createSahroudFirebaseAuth({
       recaptchaVerifier = new RecaptchaVerifier(auth, containerId, { size: "invisible" });
       pendingPhoneConfirmation = await signInWithPhoneNumber(
         auth,
+        phoneNumber,
+        recaptchaVerifier
+      );
+      return { sms_sent: true };
+    },
+
+    async sendPhoneCodeToLinkCurrentUser(phoneNumber, containerId = "sahroud-recaptcha") {
+      if (!auth.currentUser) throw new Error("sign_in_required_before_linking");
+      if (typeof phoneNumber !== "string" || !/^\\+[1-9]\\d{7,14}$/.test(phoneNumber)) {
+        throw new TypeError("phone_number_must_be_e164");
+      }
+      if (recaptchaVerifier) {
+        await recaptchaVerifier.clear();
+        recaptchaVerifier = null;
+      }
+      recaptchaVerifier = new RecaptchaVerifier(auth, containerId, { size: "invisible" });
+      pendingPhoneConfirmation = await linkWithPhoneNumber(
+        auth.currentUser,
         phoneNumber,
         recaptchaVerifier
       );
