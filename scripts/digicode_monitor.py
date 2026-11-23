@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Public-source Digikala treasure-hunt monitor with bounded image OCR.
 Only fetches publicly accessible pages/images; never logs in or bypasses controls."""
-import html, json, os, re, subprocess, tempfile, time
+import hashlib, html, json, os, re, subprocess, tempfile, time
 import urllib.request
 from datetime import datetime, timezone
 from html.parser import HTMLParser
@@ -12,7 +12,7 @@ HUNT = "https://www.digikala.com/landings/prize-catcher/"
 TELEGRAM = "https://t.me/s/digikalaofficialaccount"
 CODE_RE = re.compile(r"\bDK[A-Z0-9]{3,8}\b", re.I)
 HINT_RE = re.compile(r"شکار\s*گنج|جاکدی|جاکُدی|prize.?catcher|کد\s*تخفیف", re.I)
-MAX_PAGES, MAX_IMAGES, MAX_BYTES = 12, 48, 2_500_000
+MAX_PAGES, MAX_IMAGES, MAX_BYTES = 24, 120, 3_000_000
 
 def now():
     return datetime.now(timezone.utc).isoformat()
@@ -29,14 +29,16 @@ class Links(HTMLParser):
         a=dict(attrs)
         if tag == "a" and a.get("href"): self.hrefs.append(a["href"])
         if tag in ("img","source"):
-            for k in ("src","data-src","data-original","srcset"):
+            for k in ("src","data-src","data-original","data-lazy","data-srcset","srcset"):
                 v=a.get(k)
                 if v:
                     self.images.extend(x.strip().split(" ")[0] for x in v.split(",") if x.strip())
+        if tag == "meta" and a.get("content") and a.get("property","").lower() in ("og:image","og:image:url"):
+            self.images.append(a["content"])
 
 def allowed_page(url):
     p=urlparse(url)
-    return p.scheme=="https" and (p.netloc=="www.digikala.com" or p.netloc=="digikala.com")
+    return p.scheme=="https" and p.netloc in ("www.digikala.com","digikala.com") and ("prize-catcher" in p.path or "category" in p.path.lower() or "/product/" in p.path.lower())
 
 def allowed_image(url):
     p=urlparse(url)
@@ -59,8 +61,8 @@ def main():
                 if allowed_image(u): images.append((u,label,url))
             for href in parser.hrefs:
                 u=urljoin(url,href).split("#")[0]
-                if allowed_page(u) and u not in visited and len(pages)<MAX_PAGES and ("/category-" in u or "/search/category" in u or "category" in u or "prize-catcher" in u):
-                    pages.append((u,"صفحه عمومی دسته‌بندی/کمپین"))
+                if allowed_page(u) and u not in {p[0] for p in pages} and len(pages)<MAX_PAGES:
+                    pages.append((u,"صفحه عمومی محصول" if "/product/" in urlparse(u).path else "صفحه عمومی دسته‌بندی/کمپین"))
             text=html.unescape(re.sub(r"<[^>]+>"," ",body))
             if HINT_RE.search(text):
                 for code in CODE_RE.findall(text):
@@ -81,7 +83,7 @@ def main():
                     found.setdefault(code.upper(),{"code":code.upper(),"source_name":label,"source_url":url,"source_type":"public","discount_percent":None,"status":"سرنخ متنی؛ نیازمند تأیید","excerpt":"کد در متن صفحه عمومی دیده شد."})
         except Exception as e: errors.append({"source":url[:100],"error":str(e)[:160]})
     # OCR only publicly linked images, with strict limits and a small request delay.
-    seen=set()
+    seen=set(); downloaded=0; ocr_count=0; image_hashes=set()
     for img_url,label,page_url in images:
         if len(seen)>=MAX_IMAGES: break
         if img_url in seen: continue
@@ -89,6 +91,9 @@ def main():
         try:
             data,ctype=get(img_url,MAX_BYTES)
             if len(data)<1500 or len(data)>=MAX_BYTES or (ctype and not ctype.startswith("image/")): continue
+            digest=hashlib.sha256(data).hexdigest()
+            if digest in image_hashes: continue
+            image_hashes.add(digest); downloaded+=1
             suffix=".jpg"
             if "png" in ctype: suffix=".png"
             elif "webp" in ctype: suffix=".webp"
@@ -96,6 +101,7 @@ def main():
                 tmp.write(data); tmp.flush()
                 result=subprocess.run(["tesseract",tmp.name,"stdout","-l","eng"],capture_output=True,text=True,timeout=12)
             ocr=result.stdout or ""
+            if result.returncode==0: ocr_count+=1
             for code in CODE_RE.findall(ocr):
                 code=code.upper()
                 found.setdefault(code,{"code":code,"source_name":"OCR تصویر عمومی محصول/کمپین","source_url":page_url,"image_url":img_url,"source_type":"image_ocr","discount_percent":None,"status":"سرنخ استخراج‌شده از تصویر؛ حتماً در صفحه رسمی بررسی شود","excerpt":ocr[:300]})
@@ -112,13 +118,13 @@ def main():
     if not candidates and errors:
         candidates=[{**v,"status":"سرنخ قبلی؛ منبع این نوبت در دسترس نبود"} for v in old.values()]
     candidates.sort(key=lambda x:(x.get("discount_percent") or 0),reverse=True)
-    output={"updated_at":now(),"last_checked_at":checked,"monitor_status":"ok" if not errors else ("partial" if candidates else "unavailable"),"scan_stats":{"pages_checked":len(visited)+2,"public_images_seen":len(seen),"ocr_enabled":True},"notice":"تمام موارد صرفاً سرنخ عمومی یا OCR هستند؛ هیچ‌کدام بدون آزمایش در صفحه رسمی تأییدشده نیستند.","candidates":candidates,"source_errors":errors}
+    output={"updated_at":now(),"last_checked_at":checked,"monitor_status":"ok" if not errors else ("partial" if candidates else "unavailable"),"scan_stats":{"pages_checked":len(visited)+2,"public_images_seen":len(seen),"images_downloaded":downloaded,"images_ocr_processed":ocr_count,"unique_image_hashes":len(image_hashes),"ocr_enabled":True},"notice":"تمام موارد صرفاً سرنخ عمومی یا OCR هستند؛ هیچ‌کدام بدون آزمایش در صفحه رسمی تأییدشده نیستند.","candidates":candidates,"source_errors":errors}
     os.makedirs("digicode",exist_ok=True)
     with open("digicode/candidates.json","w",encoding="utf-8") as f: json.dump(output,f,ensure_ascii=False,indent=2)
     summary=os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary,"a",encoding="utf-8") as f:
             f.write(f"\n- بررسی: {checked}\n- صفحات: {output['scan_stats']['pages_checked']}\n- تصاویر OCR شده: {len(seen)}\n- سرنخ‌ها: {len(candidates)}\n- خطاها: {len(errors)}\n")
-    print(json.dumps({"checked_at":checked,"leads":len(candidates),"pages":output["scan_stats"]["pages_checked"],"images":len(seen),"errors":len(errors)},ensure_ascii=False))
+    print(json.dumps({"checked_at":checked,"leads":len(candidates),"pages":output["scan_stats"]["pages_checked"],"images_seen":len(seen),"images_downloaded":downloaded,"images_ocr":ocr_count,"errors":len(errors)},ensure_ascii=False))
 
 if __name__=="__main__": main()
