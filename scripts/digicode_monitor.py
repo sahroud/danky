@@ -29,6 +29,12 @@ def plain(text):
 def main():
     found = {}
     errors = []
+    try:
+        with open("digicode/candidates.json", encoding="utf-8") as f:
+            previous = json.load(f)
+    except Exception:
+        previous = {}
+    previous_by_code = {x.get("code"): x for x in previous.get("candidates", []) if x.get("code")}
     for label, url in SOURCES:
         try:
             raw = get_page(url)
@@ -47,13 +53,16 @@ def main():
                     "source_url": url,
                     "discount_percent": discount,
                     "status": "سرنخ از منبع عمومی؛ پذیرش در حساب دیجی‌کالا هنوز آزمایش نشده",
-                    "seen_at": datetime.now(timezone.utc).isoformat(),
+                    "seen_at": previous_by_code.get(code, {}).get("seen_at") or datetime.now(timezone.utc).isoformat(),
                     "excerpt": snippet[:420],
                 }
         except Exception as exc:
             errors.append({"source": label, "error": str(exc)[:240]})
+    old_codes = sorted(previous_by_code)
+    new_codes = sorted(found)
+    unchanged = old_codes == new_codes and previous.get("source_errors", []) == errors
     output = {
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": previous.get("updated_at") if unchanged and previous.get("updated_at") else datetime.now(timezone.utc).isoformat(),
         "monitor_status": "ok" if found or not errors else "partial",
         "notice": "کاندیداها سرنخ هستند؛ اعتبار و مقدار تخفیف فقط با آزمایش در جاکدی/صفحه رسمی مشخص می‌شود.",
         "candidates": sorted(found.values(), key=lambda x: (x["discount_percent"] or 0), reverse=True),
