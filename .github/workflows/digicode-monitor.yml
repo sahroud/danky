@@ -1,4 +1,4 @@
-name: SAHROUD DIGI CODE monitor
+name: SAHROUD DIGI CODE treasure hunter
 on:
   push:
     paths:
@@ -6,21 +6,28 @@ on:
       - '.github/workflows/digicode-monitor.yml'
   workflow_dispatch:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "*/5 * * * *"
 permissions:
   contents: write
 concurrency:
-  group: digicode-monitor
-  cancel-in-progress: true
+  group: digicode-treasure-hunter
+  cancel-in-progress: false
 jobs:
   scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install OCR engine
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
-      - name: Scan public campaign sources
+      - name: Scan public pages and product images
         run: python scripts/digicode_monitor.py
       - name: Publish scan results
         run: |
@@ -28,6 +35,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add digicode/candidates.json
-            git commit -m "Update Digi Code monitor results"
-            git push
+            git commit -m "Update treasure hunt scan results"
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
