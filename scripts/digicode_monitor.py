@@ -85,7 +85,7 @@ def main():
                 code=match.group(0).upper()
                 context=code_context(text,match)
                 if context:
-                    if re.fullmatch(r"DK[A-Z0-9]{3,4}",code) and re.search(r"جاکدی|جاکُدی",context,re.I):
+                    if re.fullmatch(r"DK[A-Z0-9]{3,4}",code) and re.search(r"جاکدی|جاکُدی|prize.?catcher|کدهای?\s+۵\s*یا\s*۶|کدهای?\s+5\s*یا\s*6",context,re.I):
                         code_type="کد جاکدی"
                     elif re.search(r"ارسال\s*رایگان",context):
                         code_type="کد ارسال رایگان"
@@ -111,7 +111,7 @@ def main():
                 code=match.group(0).upper()
                 context=code_context(text,match)
                 if context:
-                    if re.fullmatch(r"DK[A-Z0-9]{3,4}",code) and re.search(r"جاکدی|جاکُدی",context,re.I): code_type="کد جاکدی"
+                    if re.fullmatch(r"DK[A-Z0-9]{3,4}",code) and re.search(r"جاکدی|جاکُدی|prize.?catcher|کدهای?\s+۵\s*یا\s*۶|کدهای?\s+5\s*یا\s*6",context,re.I): code_type="کد جاکدی"
                     elif re.search(r"ارسال\s*رایگان",context): code_type="کد ارسال رایگان"
                     elif re.search(r"دیجی\s*پی|پرداخت\s*اعتباری",context): code_type="کد پرداخت اعتباری"
                     else: code_type="کد تخفیف خرید"
@@ -141,7 +141,7 @@ def main():
                 code=match.group(0).upper()
                 context=code_context(ocr,match)
                 if context:
-                    if re.fullmatch(r"DK[A-Z0-9]{3,4}",code) and re.search(r"جاکدی|جاکُدی",context,re.I): code_type="کد جاکدی"
+                    if re.fullmatch(r"DK[A-Z0-9]{3,4}",code) and re.search(r"جاکدی|جاکُدی|prize.?catcher|کدهای?\s+۵\s*یا\s*۶|کدهای?\s+5\s*یا\s*6",context,re.I): code_type="کد جاکدی"
                     elif re.search(r"ارسال\s*رایگان",context): code_type="کد ارسال رایگان"
                     elif re.search(r"دیجی\s*پی|پرداخت\s*اعتباری",context): code_type="کد پرداخت اعتباری"
                     else: code_type="کد تخفیف خرید"
