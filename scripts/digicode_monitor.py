@@ -8,7 +8,7 @@ from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
 
 UA = "Mozilla/5.0 (compatible; SAHROUD-DIGI-CODE/2.0; +https://github.com/sahroud/danky)"
-HUNT = "https://www.digikala.com/"
+JACKED_URL = "https://www.digikala.com/landings/prize-catcher/"
 TELEGRAM = "https://t.me/s/digikalaofficialaccount"
 CODE_RE = re.compile(r"\b[A-Z0-9][A-Z0-9_-]{4,15}\b", re.I)
 HINT_RE = re.compile(r"جاکدی|جاکُدی|کد\s*تخفیف|کد\s*را\s*وارد|discount\s*code|coupon|promo\s*code", re.I)
@@ -50,7 +50,7 @@ def main():
         with open("digicode/candidates.json",encoding="utf-8") as f: previous=json.load(f)
     except Exception: previous={}
     old={x.get("code"):x for x in previous.get("candidates",[]) if x.get("code")}
-    pages=[(HUNT,"وب‌سایت عمومی دیجی‌کالا"),(TELEGRAM,"کانال عمومی دیجی‌کالا")]
+    pages=[("https://www.digikala.com/","وب‌سایت عمومی دیجی‌کالا"),(TELEGRAM,"کانال رسمی دیجی‌کالا")]
     visited=set(); images=[]; found={}; errors=[]
     for url,label in pages[:2]:
         visited.add(url)
@@ -65,11 +65,20 @@ def main():
                 if allowed_page(u) and u not in {p[0] for p in pages} and len(pages)<MAX_PAGES:
                     pages.append((u,"صفحه عمومی محصول" if "/product/" in urlparse(u).path else "صفحه عمومی دسته‌بندی/کمپین"))
             text=html.unescape(re.sub(r"<[^>]+>"," ",body))
-            for code in CODE_RE.findall(text):
-                pos=text.upper().find(code.upper())
-                context=text[max(0,pos-180):pos+220]
+            for match in CODE_RE.finditer(text):
+                code=match.group(0).upper()
+                pos=match.start()
+                context=text[max(0,pos-220):min(len(text),pos+260)]
                 if HINT_RE.search(context):
-                    found[code.upper()]={"code":code.upper(),"source_name":label,"source_url":url,"source_type":"official" if "دیجی‌کالا" in label else "public","discount_percent":None,"status":"کد احتمالی؛ پذیرش هنوز آزمایش نشده","excerpt":context[:400]}
+                    if re.search(r"جاکدی|جاکُدی",context,re.I):
+                        code_type="کد جاکدی"
+                    elif re.search(r"ارسال\s*رایگان",context):
+                        code_type="کد ارسال رایگان"
+                    elif re.search(r"دیجی\s*پی|پرداخت\s*اعتباری",context):
+                        code_type="کد پرداخت اعتباری"
+                    else:
+                        code_type="کد تخفیف خرید"
+                    found[code]={"code":code,"code_type":code_type,"source_name":label,"source_url":url,"source_type":"official" if "دیجی‌کالا" in label else "public","discount_percent":None,"status":"کد احتمالی؛ پذیرش هنوز آزمایش نشده","excerpt":context[:400]}
         except Exception as e: errors.append({"source":label,"error":str(e)[:180]})
     # Crawl a small, bounded number of public category pages and collect product images.
     idx=2
@@ -83,9 +92,15 @@ def main():
                 u=urljoin(url,src)
                 if allowed_image(u): images.append((u,label,url))
             text=html.unescape(re.sub(r"<[^>]+>"," ",raw.decode("utf-8","replace")))
-            for code in CODE_RE.findall(text):
-                if HINT_RE.search(text[max(0,text.upper().find(code.upper())-160):text.upper().find(code.upper())+200]):
-                    found.setdefault(code.upper(),{"code":code.upper(),"source_name":label,"source_url":url,"source_type":"public","discount_percent":None,"status":"سرنخ متنی؛ نیازمند تأیید","excerpt":"کد در متن صفحه عمومی دیده شد."})
+            for match in CODE_RE.finditer(text):
+                code=match.group(0).upper()
+                context=text[max(0,match.start()-200):min(len(text),match.end()+220)]
+                if HINT_RE.search(context):
+                    if re.search(r"جاکدی|جاکُدی",context,re.I): code_type="کد جاکدی"
+                    elif re.search(r"ارسال\s*رایگان",context): code_type="کد ارسال رایگان"
+                    elif re.search(r"دیجی\s*پی|پرداخت\s*اعتباری",context): code_type="کد پرداخت اعتباری"
+                    else: code_type="کد تخفیف خرید"
+                    found.setdefault(code,{"code":code,"code_type":code_type,"source_name":label,"source_url":url,"source_type":"public","discount_percent":None,"status":"کد احتمالی؛ نیازمند تأیید","excerpt":context[:400]})
         except Exception as e: errors.append({"source":url[:100],"error":str(e)[:160]})
     # OCR only publicly linked images, with strict limits and a small request delay.
     seen=set(); downloaded=0; ocr_count=0; image_hashes=set()
@@ -107,12 +122,15 @@ def main():
                 result=subprocess.run(["tesseract",tmp.name,"stdout","-l","eng"],capture_output=True,text=True,timeout=12)
             ocr=result.stdout or ""
             if result.returncode==0: ocr_count+=1
-            for code in CODE_RE.findall(ocr):
-                code=code.upper()
-                pos=ocr.upper().find(code)
-                context=ocr[max(0,pos-100):pos+140]
+            for match in CODE_RE.finditer(ocr):
+                code=match.group(0).upper()
+                context=ocr[max(0,match.start()-120):min(len(ocr),match.end()+160)]
                 if HINT_RE.search(context):
-                    found.setdefault(code,{"code":code,"source_name":"OCR تصویر عمومی دیجی‌کالا","source_url":page_url,"image_url":img_url,"source_type":"image_ocr","discount_percent":None,"status":"کد احتمالی استخراج‌شده از تصویر؛ نیازمند آزمایش","excerpt":context[:300]})
+                    if re.search(r"جاکدی|جاکُدی",context,re.I): code_type="کد جاکدی"
+                    elif re.search(r"ارسال\s*رایگان",context): code_type="کد ارسال رایگان"
+                    elif re.search(r"دیجی\s*پی|پرداخت\s*اعتباری",context): code_type="کد پرداخت اعتباری"
+                    else: code_type="کد تخفیف خرید"
+                    found.setdefault(code,{"code":code,"code_type":code_type,"source_name":"OCR تصویر عمومی دیجی‌کالا","source_url":page_url,"image_url":img_url,"source_type":"image_ocr","discount_percent":None,"status":"کد احتمالی استخراج‌شده از تصویر؛ نیازمند آزمایش","excerpt":context[:300]})
             time.sleep(.12)
         except Exception:
             continue
@@ -126,7 +144,7 @@ def main():
     if not candidates and errors:
         candidates=[{**v,"status":"سرنخ قبلی؛ منبع این نوبت در دسترس نبود"} for v in old.values()]
     candidates.sort(key=lambda x:(x.get("discount_percent") or 0),reverse=True)
-    output={"updated_at":now(),"last_checked_at":checked,"monitor_status":"ok" if not errors else ("partial" if candidates else "unavailable"),"scan_stats":{"pages_checked":len(visited)+2,"public_images_seen":len(seen),"images_downloaded":downloaded,"images_ocr_processed":ocr_count,"unique_image_hashes":len(image_hashes),"ocr_enabled":True},"notice":"تمام موارد صرفاً سرنخ عمومی یا OCR هستند؛ اعتبار هر کد باید در حساب/جاکدی دیجی‌کالا آزمایش شود.","candidates":candidates,"source_errors":errors}
+    output={"updated_at":now(),"last_checked_at":checked,"monitor_status":"ok" if not errors else ("partial" if candidates else "unavailable"),"scan_stats":{"pages_checked":len(visited),"public_images_seen":len(seen),"images_downloaded":downloaded,"images_ocr_processed":ocr_count,"unique_image_hashes":len(image_hashes),"ocr_enabled":True},"notice":"تمام موارد صرفاً سرنخ عمومی یا OCR هستند؛ اعتبار هر کد باید در حساب/جاکدی دیجی‌کالا آزمایش شود.","candidates":candidates,"source_errors":errors}
     os.makedirs("digicode",exist_ok=True)
     with open("digicode/candidates.json","w",encoding="utf-8") as f: json.dump(output,f,ensure_ascii=False,indent=2)
     summary=os.environ.get("GITHUB_STEP_SUMMARY")
