@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#10251f"><title>SAHROUD DIGI CODE</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1512;--panel:#14231e;--line:#294238;--green:#43d49a;--muted:#a7b9b0;--orange:#ffca72}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(160deg,#10251f,#09110f 65%);color:#f2faf5;font-family:Tahoma,Arial,sans-serif;line-height:1.8}
+main{max-width:760px;margin:auto;padding:18px 14px 40px}.head{display:flex;align-items:center;justify-content:space-between;gap:12px}.brand{font-size:19px;font-weight:800;color:var(--green)}.sub{color:var(--muted);font-size:12px}
+.card{background:rgba(20,35,30,.96);border:1px solid var(--line);border-radius:18px;padding:15px;margin:14px 0;box-shadow:0 8px 28px #0003}
+h2{font-size:16px;margin:0 0 10px}label{display:block;font-size:13px;color:var(--muted);margin:8px 0 4px}
+input,select,button{font:inherit;border-radius:11px;border:1px solid var(--line);padding:11px;background:#0d1915;color:#fff;width:100%}
+button{background:#1e4537;border-color:#32785b;font-weight:700;cursor:pointer}button.secondary{background:#172923;border-color:var(--line)}button:active{transform:scale(.99)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:9px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{background:#0d1915;border-radius:12px;padding:9px;text-align:center}.stat b{display:block;font-size:20px;color:var(--green)}
+.pill{display:inline-block;border-radius:20px;padding:2px 9px;background:#224b3b;color:#9af0c8;font-size:11px}.warn{color:var(--orange);font-size:12px}.code{font-size:23px;letter-spacing:1px;font-weight:800;color:var(--green);direction:ltr;text-align:center}
+.item{border-top:1px solid var(--line);padding:12px 0}.item:first-child{border:0}.itemtop{display:flex;justify-content:space-between;gap:8px;align-items:center}.small{font-size:12px;color:var(--muted)}a{color:#8ce6bd}
+footer{font-size:11px;color:var(--muted);text-align:center;margin-top:22px}
+@media(max-width:420px){.row{grid-template-columns:1fr}.stats{grid-template-columns:repeat(3,1fr)}}
+</style></head>
+<body><main>
+<div class="head"><div><div class="brand">SAHROUD DIGI CODE</div><div class="sub">شکار کدهای واقعی تخفیف دیجی‌کالا</div></div><span class="pill">حداقل تخفیف: ۸۰٪</span></div>
+<section class="card">
+<h2>پایش نوبت بعدی جاکدی</h2><div class="stats"><div class="stat"><b id="clock">--:--</b><span class="small">ساعت محلی</span></div><div class="stat"><b id="count">--:--</b><span class="small">تا رأس ساعت بعد</span></div><div class="stat"><b id="total">0</b><span class="small">کدهای ثبت‌شده</span></div></div>
+<p class="small">هنگام باز بودن این صفحه، زمان هر ساعت کنترل می‌شود. برای بررسی نوبت جدید، دکمه زیر را بزنید.</p>
+<div class="row"><button id="searchBtn">بررسی و جست‌وجوی کدهای شکار گنج</button><button class="secondary" id="notifyBtn">فعال‌سازی اعلان</button></div>
+<p class="warn" id="status">منابع رسمی را بررسی کنید؛ هیچ کدی تا پیش از پذیرش در سایت، برنده محسوب نمی‌شود.</p>
+</section>
+<section class="card">
+<h2>تنظیم هشدار</h2>
+<div class="row"><div><label>ساعت شروع سکوت</label><input id="quietStart" type="time" value="23:00"></div><div><label>ساعت پایان سکوت</label><input id="quietEnd" type="time" value="07:00"></div></div>
+<div class="row"><button id="saveSettings">ذخیره ساعات سکوت</button><button class="secondary" id="testSound">آزمایش زنگ</button></div>
+<label><input id="soundOn" type="checkbox" checked style="width:auto;vertical-align:middle"> هشدار صوتی خارج از ساعات سکوت</label>
+</section>
+<section class="card">
+<h2>افزودن کد پیدا شده برای بررسی</h2>
+<p class="small">کد را از اطلاعیه رسمی یا صفحه کمپین وارد کنید. این نسخه فعلاً کد را از خود دیجی‌کالا استخراج یا اعتبارسنجی خودکار نمی‌کند؛ وضعیت واقعی باید با ثبت در حساب شما مشخص شود.</p>
+<label>کد تخفیف</label><input id="code" placeholder="مثلاً DKXXXX" dir="ltr">
+<div class="row"><div><label>درصد تخفیف اعلام‌شده</label><input id="discount" type="number" min="0" max="100" placeholder="مثلاً ۹۵"></div><div><label>نوع کد</label><select id="kind"><option value="treasure">شکار گنج</option><option value="jacked">جاکدی</option><option value="other">سایر</option></select></div></div>
+<label>لینک یا منبع انتشار</label><input id="source" placeholder="نشانی صفحه یا توضیح منبع" dir="ltr">
+<div class="row"><button id="addBtn">ثبت کد در فهرست</button><button class="secondary" id="openHunt">بازکردن صفحه شکار گنج</button></div>
+</section>
+<section class="card"><h2>کدهای ثبت‌شده — اولویت با بیشترین تخفیف</h2><div id="list" class="small">هنوز کدی ثبت نشده است.</div></section>
+<section class="card">
+<h2>جست‌وجوی منابع</h2><div class="row">
+<button class="secondary" id="official">صفحه رسمی شکار گنج</button>
+<button class="secondary" id="searchWeb">جست‌وجوی کدهای تازه در وب</button>
+</div><p class="small">نتایج شبکه‌های اجتماعی و کانال‌های متفرقه صرفاً سرنخ هستند؛ کد باید در صفحه رسمی پذیرفته شود.</p>
+</section>
+<footer>SAHROUD DIGI CODE · نسخه آزمایشی · هیچ رمز عبور یا کد پیامکی از شما درخواست نمی‌شود.</footer>
+</main>
+<script>
+const HUNT='https://www.digikala.com/landings/prize-catcher/';
+const $=id=>document.getElementById(id);let entries=JSON.parse(localStorage.getItem('sdc_entries')||'[]');let lastHour=-1;
+function save(){localStorage.setItem('sdc_entries',JSON.stringify(entries));render()}
+function inQuiet(){if(!$('soundOn').checked)return true;const n=new Date(),m=n.getHours()*60+n.getMinutes(),a=($('quietStart').value||'23:00').split(':').map(Number),b=($('quietEnd').value||'07:00').split(':').map(Number),s=a[0]*60+a[1],e=b[0]*60+b[1];return s<e?m>=s&&m<e:m>=s||m<e}
+function ring(){if(inQuiet())return;try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const c=new C();[880,1175,880].forEach((f,i)=>{let o=c.createOscillator(),g=c.createGain();o.frequency.value=f;o.connect(g);g.connect(c.destination);g.gain.setValueAtTime(.0001,c.currentTime+i*.23);g.gain.exponentialRampToValueAtTime(.18,c.currentTime+i*.23+.03);g.gain.exponentialRampToValueAtTime(.0001,c.currentTime+i*.23+.18);o.start(c.currentTime+i*.23);o.stop(c.currentTime+i*.23+.2)})}catch(e){}}
+function render(){entries.sort((a,b)=>b.discount-a.discount);$('total').textContent=entries.length;$('list').innerHTML=entries.length?entries.map((x,i)=>'<div class="item"><div class="itemtop"><b>'+(i===0?'⭐ ':'')+x.code+'</b><span class="pill">'+x.discount+'٪ · '+(x.kind==='treasure'?'شکار گنج':x.kind==='jacked'?'جاکدی':'سایر')+'</span></div><div class="small">وضعیت: '+x.status+' · '+new Date(x.created).toLocaleString('fa-IR')+'</div>'+(x.source?'<div class="small">منبع: '+escapeHtml(x.source)+'</div>':'')+'<div class="row" style="margin-top:8px"><button onclick="copyCode(\''+x.id+'\')">کپی کد</button><button class="secondary" onclick="markUsed(\''+x.id+'\')">ثبت نتیجه بررسی</button></div></div>').join(''):'هنوز کدی ثبت نشده است.'}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+window.copyCode=id=>{let x=entries.find(e=>e.id===id);if(x)navigator.clipboard.writeText(x.code).then(()=>$('status').textContent='کد '+x.code+' کپی شد؛ صفحه جاکدی را باز کنید و در محل مربوط بچسبانید.').catch(()=>$('status').textContent='کپی خودکار ممکن نشد؛ کد را دستی انتخاب کنید.')};
+window.markUsed=id=>{let x=entries.find(e=>e.id===id);if(!x)return;let v=prompt('نتیجه ثبت کد را وارد کنید: پذیرفته شد / رد شد / منقضی');if(v){x.status=v;save()}};
+$('addBtn').onclick=()=>{let code=$('code').value.trim().toUpperCase(),d=Number($('discount').value);if(!code||!Number.isFinite(d)||d<=80||d>100){$('status').textContent='کد و تخفیف بیشتر از ۸۰٪ را وارد کنید.';return}entries.push({id:Date.now().toString(),code,discount:d,kind:$('kind').value,source:$('source').value.trim(),status:'تأییدنشده؛ نیازمند آزمایش در دیجی‌کالا',created:Date.now()});save();$('code').value='';$('discount').value='';$('source').value='';ring();$('status').textContent='کد ثبت شد؛ هنوز واقعی یا برنده بودن آن تأیید نشده است.'};
+$('saveSettings').onclick=()=>{$('status').textContent='ساعات سکوت ذخیره شد.';localStorage.setItem('sdc_quiet',JSON.stringify({s:$('quietStart').value,e:$('quietEnd').value,on:$('soundOn').checked}))};
+$('testSound').onclick=()=>ring();
+$('notifyBtn').onclick=async()=>{if(!('Notification'in window)){alert('اعلان این مرورگر پشتیبانی نمی‌شود');return}let p=await Notification.requestPermission();$('status').textContent='وضعیت مجوز اعلان: '+p};
+function tick(){let n=new Date();$('clock').textContent=n.toLocaleTimeString('fa-IR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});let left=59-n.getMinutes(),sec=59-n.getSeconds();$('count').textContent=String(left).padStart(2,'0')+':'+String(sec).padStart(2,'0');if(n.getMinutes()===0&&n.getSeconds()<3&&lastHour!==n.getHours()){lastHour=n.getHours();if(!inQuiet()){ring();if('Notification'in window&&Notification.permission==='granted')new Notification('SAHROUD DIGI CODE',{body:'زمان بررسی نوبت جدید جاکدی دیجی‌کالا است.'})}$('status').textContent='نوبت ساعتی رسید؛ منابع شکار گنج را بررسی کنید.'}}
+$('searchBtn').onclick=()=>{window.open('https://www.google.com/search?q='+encodeURIComponent('site:digikala.com شکار گنج کد تخفیف دیجی کالا'),'_blank');window.open(HUNT,'_blank');$('status').textContent='صفحه رسمی و جست‌وجوی وب باز شدند؛ کدها را فقط پس از تأیید منبع ثبت کنید.'};
+$('openHunt').onclick=$('official').onclick=()=>window.open(HUNT,'_blank');
+$('searchWeb').onclick=()=>window.open('https://www.google.com/search?q='+encodeURIComponent('کد جدید شکار گنج دیجی کالا امروز'),'_blank');
+let q=JSON.parse(localStorage.getItem('sdc_quiet')||'null');if(q){$('quietStart').value=q.s;$('quietEnd').value=q.e;$('soundOn').checked=q.on}
+render();tick();setInterval(tick,1000);
+</script></body></html>
