@@ -106,7 +106,7 @@ test("unknown routes return 404", async () => {
 test("write methods are disabled until authentication and authorization are designed", async () => {
   const response = await worker.fetch(request("/v1/catalog/products", { method: "POST" }), {});
   assert.equal(response.status, 405);
-  assert.equal(response.headers.get("allow"), "GET, POST, OPTIONS");
+  assert.equal(response.headers.get("allow"), "GET, OPTIONS");
 });
 
 test("unlisted browser origins are rejected", async () => {
