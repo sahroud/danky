@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Public-source Digikala treasure-hunt monitor with bounded image OCR.
+"""Public-source Digikala discount-code monitor with bounded image OCR.
 Only fetches publicly accessible pages/images; never logs in or bypasses controls."""
 import hashlib, html, json, os, re, subprocess, tempfile, time
 import urllib.request
@@ -8,10 +8,10 @@ from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
 
 UA = "Mozilla/5.0 (compatible; SAHROUD-DIGI-CODE/2.0; +https://github.com/sahroud/danky)"
-HUNT = "https://www.digikala.com/landings/prize-catcher/"
+HUNT = "https://www.digikala.com/"
 TELEGRAM = "https://t.me/s/digikalaofficialaccount"
-CODE_RE = re.compile(r"\bDK[A-Z0-9]{3,8}\b", re.I)
-HINT_RE = re.compile(r"شکار\s*گنج|جاکدی|جاکُدی|prize.?catcher|کد\s*تخفیف", re.I)
+CODE_RE = re.compile(r"\b[A-Z0-9][A-Z0-9_-]{4,15}\b", re.I)
+HINT_RE = re.compile(r"جاکدی|جاکُدی|کد\s*تخفیف|کد\s*را\s*وارد|discount\s*code|coupon|promo\s*code", re.I)
 MAX_PAGES, MAX_IMAGES, MAX_BYTES = 24, 120, 3_000_000
 
 def now():
@@ -50,7 +50,7 @@ def main():
         with open("digicode/candidates.json",encoding="utf-8") as f: previous=json.load(f)
     except Exception: previous={}
     old={x.get("code"):x for x in previous.get("candidates",[]) if x.get("code")}
-    pages=[(HUNT,"صفحه رسمی شکار گنج"),(TELEGRAM,"کانال عمومی دیجی‌کالا")]
+    pages=[(HUNT,"وب‌سایت عمومی دیجی‌کالا"),(TELEGRAM,"کانال عمومی دیجی‌کالا")]
     visited=set(); images=[]; found={}; errors=[]
     for url,label in pages[:2]:
         visited.add(url)
@@ -121,7 +121,7 @@ def main():
     if not candidates and errors:
         candidates=[{**v,"status":"سرنخ قبلی؛ منبع این نوبت در دسترس نبود"} for v in old.values()]
     candidates.sort(key=lambda x:(x.get("discount_percent") or 0),reverse=True)
-    output={"updated_at":now(),"last_checked_at":checked,"monitor_status":"ok" if not errors else ("partial" if candidates else "unavailable"),"scan_stats":{"pages_checked":len(visited)+2,"public_images_seen":len(seen),"images_downloaded":downloaded,"images_ocr_processed":ocr_count,"unique_image_hashes":len(image_hashes),"ocr_enabled":True},"notice":"تمام موارد صرفاً سرنخ عمومی یا OCR هستند؛ هیچ‌کدام بدون آزمایش در صفحه رسمی تأییدشده نیستند.","candidates":candidates,"source_errors":errors}
+    output={"updated_at":now(),"last_checked_at":checked,"monitor_status":"ok" if not errors else ("partial" if candidates else "unavailable"),"scan_stats":{"pages_checked":len(visited)+2,"public_images_seen":len(seen),"images_downloaded":downloaded,"images_ocr_processed":ocr_count,"unique_image_hashes":len(image_hashes),"ocr_enabled":True},"notice":"تمام موارد صرفاً سرنخ عمومی یا OCR هستند؛ اعتبار هر کد باید در حساب/جاکدی دیجی‌کالا آزمایش شود.","candidates":candidates,"source_errors":errors}
     os.makedirs("digicode",exist_ok=True)
     with open("digicode/candidates.json","w",encoding="utf-8") as f: json.dump(output,f,ensure_ascii=False,indent=2)
     summary=os.environ.get("GITHUB_STEP_SUMMARY")
