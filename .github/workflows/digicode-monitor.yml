@@ -1,5 +1,10 @@
 name: SAHROUD DIGI CODE monitor
 on:
+  push:
+    paths:
+      - 'scripts/digicode_monitor.py'
+      - '.github/workflows/digicode-monitor.yml'
+      - 'digicode/candidates.json'
   workflow_dispatch:
   schedule:
     - cron: "*/15 * * * *"
