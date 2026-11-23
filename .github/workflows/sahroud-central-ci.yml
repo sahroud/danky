@@ -29,7 +29,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Run API tests
+      - name: Install platform dependencies
+        run: npm install --ignore-scripts
+      - name: Run API and authentication tests
         run: npm test
       - name: Set up Python
         uses: actions/setup-python@v5
