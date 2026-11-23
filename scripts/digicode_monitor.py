@@ -11,7 +11,7 @@ UA = "Mozilla/5.0 (compatible; SAHROUD-DIGI-CODE/2.0; +https://github.com/sahrou
 JACKED_URL = "https://www.digikala.com/landings/prize-catcher/"
 TELEGRAM = "https://t.me/s/digikalaofficialaccount"
 CODE_RE = re.compile(r"\b[A-Z0-9][A-Z0-9_-]{4,15}\b", re.I)
-HINT_RE = re.compile(r"جاکدی|جاکُدی|کد\s*تخفیف|کد\s*را\s*وارد|discount\s*code|coupon|promo\s*code", re.I)
+HINT_RE = re.compile(r"جاکدی|جاکُدی|کد\s*تخفیف|کد\s*را\s*وارد|ارسال\s*رایگان|کد\s*ارسال|discount\s*code|coupon|promo\s*code", re.I)
 MAX_PAGES, MAX_IMAGES, MAX_BYTES = 24, 120, 3_000_000
 
 def now():
