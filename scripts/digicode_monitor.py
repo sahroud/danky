@@ -39,7 +39,7 @@ def main():
         try:
             raw = get_page(url)
             # Inspect bounded text windows around each code so unrelated page text is not attributed.
-            for match in CODE_RE.finditer(raw.upper()):
+            for match in CODE_RE.finditer(raw):
                 start, end = max(0, match.start()-500), min(len(raw), match.end()+500)
                 snippet = plain(raw[start:end])
                 if not HINT_RE.search(snippet):
@@ -58,6 +58,8 @@ def main():
                 }
         except Exception as exc:
             errors.append({"source": label, "error": str(exc)[:240]})
+    if not found and errors and previous_by_code:
+        found = {code: {**item, "status": "نتیجه قبلی؛ این نوبت منبع قابل بررسی نبود", "discount_percent": None} for code, item in previous_by_code.items()}
     old_codes = sorted(previous_by_code)
     new_codes = sorted(found)
     unchanged = old_codes == new_codes and previous.get("source_errors", []) == errors
