@@ -52,7 +52,8 @@ def main():
     old={x.get("code"):x for x in previous.get("candidates",[]) if x.get("code")}
     pages=[(HUNT,"صفحه رسمی شکار گنج"),(TELEGRAM,"کانال عمومی دیجی‌کالا")]
     visited=set(); images=[]; found={}; errors=[]
-    for url,label in pages:
+    for url,label in pages[:2]:
+        visited.add(url)
         try:
             raw,_=get(url); body=raw.decode("utf-8","replace")
             parser=Links(); parser.feed(body)
@@ -69,7 +70,9 @@ def main():
                     found[code.upper()]={"code":code.upper(),"source_name":label,"source_url":url,"source_type":"official" if "دیجی‌کالا" in label else "public","discount_percent":None,"status":"سرنخ متنی؛ پذیرش هنوز آزمایش نشده","excerpt":text[max(0,text.upper().find(code.upper())-180):text.upper().find(code.upper())+220][:400]}
         except Exception as e: errors.append({"source":label,"error":str(e)[:180]})
     # Crawl a small, bounded number of public category pages and collect product images.
-    for url,label in pages[2:MAX_PAGES]:
+    idx=2
+    while idx < min(len(pages),MAX_PAGES):
+        url,label=pages[idx]; idx+=1
         if url in visited: continue
         visited.add(url)
         try:
