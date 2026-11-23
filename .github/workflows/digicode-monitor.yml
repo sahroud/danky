@@ -1,8 +1,9 @@
-name: SAHROUD DIGI CODE treasure hunter
+name: SAHROUD DIGI CODE discount monitor
 on:
   push:
     paths:
       - 'scripts/digicode_monitor.py'
+      - 'digicode/index.html'
       - '.github/workflows/digicode-monitor.yml'
   workflow_dispatch:
   schedule:
@@ -10,7 +11,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: digicode-treasure-hunter
+  group: sahroud-digi-code-monitor
   cancel-in-progress: false
 jobs:
   scan:
@@ -27,6 +28,25 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
+      - name: Validate Python and browser JavaScript
+        run: |
+          python -m py_compile scripts/digicode_monitor.py
+          python - <<'PY'
+          from html.parser import HTMLParser
+          class Scripts(HTMLParser):
+              def __init__(self): super().__init__(); self.active=False; self.parts=[]
+              def handle_starttag(self, tag, attrs):
+                  if tag == 'script': self.active=True
+              def handle_endtag(self, tag):
+                  if tag == 'script': self.active=False
+              def handle_data(self, data):
+                  if self.active: self.parts.append(data)
+          parser=Scripts()
+          parser.feed(open('digicode/index.html',encoding='utf-8').read())
+          assert parser.parts, 'No inline JavaScript found'
+          open('/tmp/sahroud-digicode.js','w',encoding='utf-8').write('\n'.join(parser.parts))
+          PY
+          node --check /tmp/sahroud-digicode.js
       - name: Scan public pages and product images
         run: python scripts/digicode_monitor.py
       - name: Publish scan results
