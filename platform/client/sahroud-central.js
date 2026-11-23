@@ -92,12 +92,12 @@ export class SahroudCentralClient {
     });
   }
 
-  async get(path, { signal } = {}) {
+  async get(path, { signal, headers = {} } = {}) {
     let response;
     try {
       response = await this.fetchImpl(this.apiBase + path, {
         method: "GET",
-        headers: { Accept: "application/json" },
+        headers: { Accept: "application/json", ...headers },
         cache: "no-store",
         credentials: "omit",
         redirect: "error",
