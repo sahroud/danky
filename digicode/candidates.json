@@ -1,7 +1,17 @@
 {
-  "updated_at": null,
-  "monitor_status": "not_run",
-  "notice": "هنوز اولین اجرای پایش انجام نشده است.",
-  "candidates": [],
+  "updated_at": "2026-11-23T03:11:41.178Z",
+  "monitor_status": "seeded_from_official_source",
+  "notice": "کد از کانال رسمی دیجی‌کالا استخراج شده است؛ درصد تخفیف و پذیرش آن در حساب کاربر هنوز تأیید نشده است.",
+  "candidates": [
+    {
+      "code": "DKBLG",
+      "source_name": "کانال رسمی تلگرام دیجی‌کالا",
+      "source_url": "https://t.me/s/digikalaofficialaccount",
+      "discount_percent": null,
+      "status": "منتشرشده در منبع رسمی؛ نیازمند آزمایش در جاکدی",
+      "seen_at": "2026-11-23T03:11:41.182Z",
+      "excerpt": "برای دریافت کد تخفیف بلک‌فرایدی، این کد رو بزن توی جاکُدی دیجی‌کالا. کد: DKBLG"
+    }
+  ],
   "source_errors": []
 }
