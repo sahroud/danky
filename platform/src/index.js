@@ -329,8 +329,12 @@ async function handle(request, env = {}) {
     response = await authenticate(request, env);
   } else if (request.method === "GET" && url.pathname === "/v1/me") {
     response = await currentUser(request, env);
-  } else if (!["GET", "POST"].includes(request.method)) {
-    response = json({ error: "method_not_allowed" }, 405, { allow: "GET, POST, OPTIONS" });
+  } else if (url.pathname === "/v1/auth/session") {
+    response = json({ error: "method_not_allowed" }, 405, { allow: "POST, OPTIONS" });
+  } else if (url.pathname === "/v1/me") {
+    response = json({ error: "method_not_allowed" }, 405, { allow: "GET, OPTIONS" });
+  } else if (request.method !== "GET") {
+    response = json({ error: "method_not_allowed" }, 405, { allow: "GET, OPTIONS" });
   } else {
     response = json({ error: "not_found" }, 404);
   }
