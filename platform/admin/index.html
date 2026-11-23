@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#102b3f">
+<meta name="description" content="درگاه یکپارچه دسترسی و ارسال ابزارها">
+<title>درگاه یکپارچه</title>
+<style>
+:root{color-scheme:dark;--bg:#081725;--panel:#10283a;--panel2:#15354a;--line:#29495d;--text:#f3f8fb;--muted:#a9c0ce;--accent:#55d6be;--accent2:#8bb8ff}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:Tahoma,Arial,sans-serif;background:radial-gradient(ellipse at 85% 0%,#17445a 0,transparent 42%),linear-gradient(160deg,#071522,#0d2435 55%,#081725);color:var(--text)}
+main{width:min(760px,100%);margin:auto;padding:24px 16px calc(34px + env(safe-area-inset-bottom))}
+header{text-align:center;padding:24px 12px 20px} .mark{width:62px;height:62px;margin:0 auto 14px;border-radius:20px;background:linear-gradient(145deg,#55d6be,#4b8bd9);display:grid;place-items:center;color:#092334;font-size:30px;font-weight:bold;box-shadow:0 12px 32px #0005}
+h1{font-size:23px;margin:0 0 9px;letter-spacing:-.5px}header p{margin:0;color:var(--muted);font-size:13px;line-height:1.9}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.item{background:linear-gradient(145deg,#14364b,#10283a);border:1px solid var(--line);border-radius:18px;padding:14px;box-shadow:0 8px 24px #0002;min-width:0}
+.item .top{display:flex;align-items:center;gap:9px;margin-bottom:12px}.symbol{width:35px;height:35px;flex:0 0 35px;border-radius:12px;background:#214b60;display:grid;place-items:center;color:#8fe8d8;font-size:17px}
+.item .hint{font-size:11px;color:var(--muted)}
+button{font:inherit;border:0;cursor:pointer;touch-action:manipulation}
+.open{display:block;width:100%;padding:12px;border-radius:12px;background:linear-gradient(90deg,#5bdec2,#86d9ca);color:#092b32;font-size:14px;font-weight:bold}
+.share{display:block;width:100%;margin-top:8px;padding:10px;border-radius:11px;background:#1b4056;color:#eaf6fb;border:1px solid #396178;font-size:13px}
+button:active{transform:scale(.985)}button:focus-visible{outline:3px solid var(--accent2);outline-offset:3px}
+footer{text-align:center;color:#88a7b8;font-size:11px;line-height:1.9;padding:22px 8px 0}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translate(-50%,18px);opacity:0;pointer-events:none;background:#e8fff9;color:#073b38;border-radius:12px;padding:11px 16px;font-size:13px;box-shadow:0 8px 30px #0006;transition:.25s;z-index:5;max-width:90vw;text-align:center}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+@media(max-width:380px){main{padding-inline:12px}.grid{gap:9px}.item{padding:11px}.open{padding:11px}}
+@media(min-width:620px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="mark" aria-hidden="true">S</div>
+<h1>درگاه یکپارچه</h1>
+<p>برای ورود، دکمهٔ سبز را بزنید. برای فرستادن نشانی، دکمهٔ ارسال را انتخاب کنید تا برنامه‌های اشتراک‌گذاری گوشی نمایش داده شوند.</p>
+</header>
+<section class="grid" id="apps" aria-label="دسترسی‌ها"></section>
+<footer>برای بهترین تجربه، این صفحه را در مرورگر گوشی باز کنید.<br>در صورت پشتیبانی گوشی، از منوی مرورگر گزینهٔ «افزودن به صفحهٔ اصلی» را بزنید.</footer>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>
+const entries = [
+ {url:"https://sahroud.github.io/danky/family-guard/",icon:"⌖"},
+ {url:"https://sahroud.github.io/steel/steel2/",icon:"▦"},
+ {url:"https://sahroud.github.io/SAHROUD-METREH/",icon:"▤"},
+ {url:"https://sahroud.github.io/utm/",icon:"⌖"},
+ {url:"https://sahroud.github.io/A/",icon:"◎"},
+ {url:"https://sahroud.github.io/utm/gps-rtk/",icon:"⌁"},
+ {url:"https://sahroud.github.io/utm/earth/",icon:"◉"},
+ {url:"https://sahroud.github.io/utm/topography/",icon:"⌁"},
+ {url:"https://sahroud.github.io/A/tasbih/",icon:"☾"},
+ {url:"https://sahroud.github.io/A/rakat/",icon:"◌"},
+ {url:"https://sahroud.github.io/A/counter/",icon:"＃"},
+ {url:"https://sahroud.github.io/A/games/",icon:"◇"},
+ {url:"https://sahroud.github.io/A/windows-doctor/",icon:"⚙"}
+];
+const root=document.getElementById("apps");
+const toast=document.getElementById("toast");
+let toastTimer;
+function notify(message){toast.textContent=message;toast.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove("show"),2400)}
+entries.forEach((entry,index)=>{
+ const card=document.createElement("article");card.className="item";
+ const top=document.createElement("div");top.className="top";
+ const symbol=document.createElement("div");symbol.className="symbol";symbol.setAttribute("aria-hidden","true");symbol.textContent=entry.icon;
+ const hint=document.createElement("div");hint.className="hint";hint.textContent="دسترسی شماره "+(index+1);
+ top.append(symbol,hint);
+ const open=document.createElement("button");open.className="open";open.textContent="ورود";open.type="button";open.addEventListener("click",()=>window.open(entry.url,"_blank","noopener"));
+ const share=document.createElement("button");share.className="share";share.textContent="ارسال";share.type="button";
+ share.addEventListener("click",async()=>{
+   try{
+     if(navigator.share){await navigator.share({url:entry.url});}
+     else if(navigator.clipboard && window.isSecureContext){await navigator.clipboard.writeText(entry.url);notify("نشانی کپی شد؛ در برنامهٔ موردنظر جای‌گذاری کنید.");}
+     else {const field=document.createElement("textarea");field.value=entry.url;field.style.position="fixed";field.style.opacity="0";document.body.appendChild(field);field.select();const ok=document.execCommand("copy");field.remove();notify(ok?"نشانی کپی شد.":"کپی خودکار ممکن نیست؛ نشانی را از نوار مرورگر بردارید.");}
+   }catch(error){if(error && error.name!=="AbortError")notify("اشتراک‌گذاری انجام نشد؛ دوباره تلاش کنید.");}
+ });
+ card.append(top,open,share);root.appendChild(card);
+});
+</script>
+</body>
+</html>
