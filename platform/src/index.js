@@ -282,6 +282,7 @@ async function currentUser(request, env) {
   return json({
     user: {
       principal_id: row.principal_id,
+      firebase_uid: identity.subject,
       status: row.principal_status,
       account_id: row.account_id,
       account_name: row.account_name,
