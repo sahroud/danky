@@ -40,3 +40,5 @@ jobs:
           python-version: "3.12"
       - name: Validate central D1 migration and constraints
         run: python test/schema.test.py
+      - name: Test concurrent feature usage enforcement with SQLite
+        run: python test/schema.test.py
