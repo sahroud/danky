@@ -30,6 +30,7 @@ required = {
     "product_features",
     "account_feature_grants",
     "plan_features",
+    "feature_usage",
 }
 assert required.issubset(tables), f"Missing tables: {required - tables}"
 
