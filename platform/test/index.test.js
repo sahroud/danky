@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { handle, resolveCentralIdentity } from "../src/index.js";
+import { handle, resolveCentralIdentity, resolveFeatureAccess } from "../src/index.js";
 
 const request = (path, options = {}) =>
   new Request(`https://central.test${path}`, options);
@@ -100,4 +100,111 @@ test("identity resolution keeps the single-account compatibility field", async (
   const identity = await resolveCentralIdentity({ CORE_DB: db }, { subject: "firebase-user-1" });
   assert.equal(identity.accountId, "account-a");
   assert.deepEqual(identity.accountIds, ["account-a"]);
+});
+
+
+function entitlementDatabase({ feature = { is_enabled: 1, access_mode: "free", usage_limit: null, lifecycle_status: "active" }, grant = null, subscription = null, usedCount = 0, accounts = [{ principal_id: "principal-1", principal_status: "active", account_id: "account-a", account_status: "active" }] } = {}) {
+  return {
+    prepare(sql) {
+      let values = [];
+      return {
+        bind(...args) { values = args; return this; },
+        async all() {
+          if (sql.includes("FROM account_identities")) return { results: accounts };
+          return { results: [] };
+        },
+        async first() {
+          if (sql.includes("FROM product_features")) return feature;
+          if (sql.includes("FROM account_feature_grants")) return grant;
+          if (sql.includes("FROM subscriptions")) return subscription;
+          if (sql.includes("FROM feature_usage")) return usedCount ? { used_count: usedCount } : null;
+          return null;
+        }
+      };
+    }
+  };
+}
+
+const entitlementRequest = (accountId = null) => new Request("https://central.test/v1/access/steel/dxf-export", {
+  headers: accountId ? { "X-Sahroud-Account-Id": accountId } : {}
+});
+const testIdentity = { subject: "firebase-user-1" };
+
+test("free enabled feature is available to a single active account", async () => {
+  const access = await resolveFeatureAccess(entitlementRequest(), { CORE_DB: entitlementDatabase() }, testIdentity, "steel", "dxf-export");
+  assert.equal(access.source, "free");
+  assert.equal(access.account.account_id, "account-a");
+  assert.equal(access.usedCount, 0);
+});
+
+test("disabled feature is denied even if its access mode is free", async () => {
+  const access = await resolveFeatureAccess(entitlementRequest(), {
+    CORE_DB: entitlementDatabase({ feature: { is_enabled: 0, access_mode: "free", usage_limit: null, lifecycle_status: "active" } })
+  }, testIdentity, "steel", "dxf-export");
+  assert.equal(access.response.status, 403);
+  assert.equal((await access.response.json()).reason, "feature_disabled");
+});
+
+test("paid feature without a grant or subscription is denied", async () => {
+  const access = await resolveFeatureAccess(entitlementRequest(), {
+    CORE_DB: entitlementDatabase({ feature: { is_enabled: 1, access_mode: "paid", usage_limit: null, lifecycle_status: "active" } })
+  }, testIdentity, "steel", "dxf-export");
+  assert.equal(access.response.status, 403);
+  assert.equal((await access.response.json()).reason, "purchase_or_subscription_required");
+});
+
+test("paid feature accepts an active feature grant and its usage limit", async () => {
+  const access = await resolveFeatureAccess(entitlementRequest(), {
+    CORE_DB: entitlementDatabase({
+      feature: { is_enabled: 1, access_mode: "paid", usage_limit: 20, lifecycle_status: "active" },
+      grant: { id: "grant-1", usage_limit: 3 },
+      usedCount: 1
+    })
+  }, testIdentity, "steel", "dxf-export");
+  assert.equal(access.source, "grant");
+  assert.equal(access.limit, 3);
+  assert.equal(access.usedCount, 1);
+});
+
+test("paid feature accepts an active plan subscription", async () => {
+  const access = await resolveFeatureAccess(entitlementRequest(), {
+    CORE_DB: entitlementDatabase({
+      feature: { is_enabled: 1, access_mode: "paid", usage_limit: null, lifecycle_status: "active" },
+      subscription: { id: "subscription-1" }
+    })
+  }, testIdentity, "steel", "dxf-export");
+  assert.equal(access.source, "subscription");
+  assert.equal(access.sourceId, "subscription-1");
+});
+
+test("usage limit blocks access when lifetime usage is exhausted", async () => {
+  const access = await resolveFeatureAccess(entitlementRequest(), {
+    CORE_DB: entitlementDatabase({
+      feature: { is_enabled: 1, access_mode: "free", usage_limit: 2, lifecycle_status: "active" },
+      usedCount: 2
+    })
+  }, testIdentity, "steel", "dxf-export");
+  assert.equal(access.response.status, 403);
+  assert.equal((await access.response.json()).reason, "usage_limit_reached");
+});
+
+test("multiple active accounts require an explicit account selection", async () => {
+  const access = await resolveFeatureAccess(entitlementRequest(), {
+    CORE_DB: entitlementDatabase({
+      accounts: [
+        { principal_id: "principal-1", principal_status: "active", account_id: "account-a", account_status: "active" },
+        { principal_id: "principal-1", principal_status: "active", account_id: "account-b", account_status: "active" }
+      ]
+    })
+  }, testIdentity, "steel", "dxf-export");
+  assert.equal(access.response.status, 409);
+  assert.equal((await access.response.json()).error, "account_selection_required");
+});
+
+test("selected account must belong to the authenticated identity", async () => {
+  const access = await resolveFeatureAccess(entitlementRequest("account-other"), {
+    CORE_DB: entitlementDatabase()
+  }, testIdentity, "steel", "dxf-export");
+  assert.equal(access.response.status, 403);
+  assert.equal((await access.response.json()).error, "account_membership_required");
 });
