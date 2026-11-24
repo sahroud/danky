@@ -223,7 +223,7 @@ async function resolveCentralIdentity(env, identity) {
   if (!env?.CORE_DB) throw Object.assign(new Error("core_database_not_configured"), { status: 503 });
 
   const existing = await env.CORE_DB.prepare(
-    "SELECT ai.principal_id, am.account_id FROM account_identities ai JOIN account_memberships am ON am.principal_id = ai.principal_id AND am.status = 'active' WHERE ai.provider = 'firebase' AND ai.provider_subject = ? ORDER BY am.created_at"
+    "SELECT ai.principal_id, am.account_id FROM account_identities ai JOIN account_memberships am ON am.principal_id = ai.principal_id AND am.status = 'active' JOIN accounts a ON a.id = am.account_id AND a.status = 'active' WHERE ai.provider = 'firebase' AND ai.provider_subject = ? ORDER BY am.created_at"
   ).bind(identity.subject).all();
 
   if (existing.results?.length) {
@@ -252,7 +252,7 @@ async function resolveCentralIdentity(env, identity) {
   ]);
 
   const resolved = await env.CORE_DB.prepare(
-    "SELECT ai.principal_id, am.account_id FROM account_identities ai JOIN account_memberships am ON am.principal_id = ai.principal_id AND am.status = 'active' WHERE ai.provider = 'firebase' AND ai.provider_subject = ? ORDER BY am.created_at"
+    "SELECT ai.principal_id, am.account_id FROM account_identities ai JOIN account_memberships am ON am.principal_id = ai.principal_id AND am.status = 'active' JOIN accounts a ON a.id = am.account_id AND a.status = 'active' WHERE ai.provider = 'firebase' AND ai.provider_subject = ? ORDER BY am.created_at"
   ).bind(identity.subject).all();
 
   if (!resolved.results?.length) throw Object.assign(new Error("account_provisioning_failed"), { status: 503 });
