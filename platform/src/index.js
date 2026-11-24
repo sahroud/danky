@@ -453,7 +453,7 @@ async function handle(request, env = {}) {
   } else if (request.method === "GET" && /^\/v1\/access\/[a-z0-9-]+\/[a-z0-9][a-z0-9._-]{1,80}$/.test(url.pathname)) {
     const parts = url.pathname.split("/");
     response = await checkFeatureAccess(request, env, parts[3], parts[4]);
-  } else if (request.method === "POST" && /^\\/v1\\/access\\/[a-z0-9-]+\\/[a-z0-9][a-z0-9._-]{1,80}\\/consume$/.test(url.pathname)) {
+  } else if (request.method === "POST" && /^\/v1\/access\/[a-z0-9-]+\/[a-z0-9][a-z0-9._-]{1,80}\/consume$/.test(url.pathname)) {
     const parts = url.pathname.split("/");
     response = await consumeFeatureUsage(request, env, parts[3], parts[4]);
   } else if (request.method === "GET" && url.pathname === "/v1/me") {
