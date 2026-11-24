@@ -38,7 +38,5 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Validate central D1 migration and constraints
-        run: python test/schema.test.py
-      - name: Test concurrent feature usage enforcement with SQLite
+      - name: Validate central schema and concurrent usage enforcement with SQLite
         run: python test/schema.test.py
