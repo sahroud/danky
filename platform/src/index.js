@@ -418,19 +418,29 @@ async function checkFeatureAccess(request, env, productKey, featureKey) {
   return json({ allowed: true, reason: access.source === "free" ? "free_feature" : access.source === "grant" ? "active_feature_grant" : "active_plan_subscription", product_key: productKey, feature_key: featureKey, access_source: access.source, usage_limit: access.limit, used_count: access.usedCount, remaining_uses: access.limit == null ? null : Math.max(0, access.limit - access.usedCount) });
 }
 
+async function incrementFeatureUsage(env, access, productKey, featureKey, now = new Date().toISOString()) {
+  // The INSERT guard is essential for a zero limit: ON CONFLICT alone only guards updates.
+  // The conflict update is also conditional, so concurrent requests cannot exceed a finite limit.
+  const result = await env.CORE_DB.prepare(
+    "INSERT INTO feature_usage (account_id,product_key,feature_key,used_count,created_at,updated_at) SELECT ?,?,?,1,?,? WHERE (? IS NULL OR ? > 0) ON CONFLICT(account_id,product_key,feature_key) DO UPDATE SET used_count=feature_usage.used_count+1,updated_at=excluded.updated_at WHERE (? IS NULL OR feature_usage.used_count < ?)"
+  ).bind(access.account.account_id, productKey, featureKey, now, now, access.limit ?? null, access.limit ?? null, access.limit ?? null, access.limit ?? null).run();
+  if (result?.meta?.changes !== 1) {
+    const current = await env.CORE_DB.prepare("SELECT used_count FROM feature_usage WHERE account_id=? AND product_key=? AND feature_key=?").bind(access.account.account_id, productKey, featureKey).first();
+    return { consumed: false, usedCount: current?.used_count || 0 };
+  }
+  const current = await env.CORE_DB.prepare("SELECT used_count FROM feature_usage WHERE account_id=? AND product_key=? AND feature_key=?").bind(access.account.account_id, productKey, featureKey).first();
+  return { consumed: true, usedCount: current?.used_count || access.usedCount + 1 };
+}
+
 async function consumeFeatureUsage(request, env, productKey, featureKey) {
   const identity = await verifyFirebaseIdToken(bearerToken(request), env);
   const access = await resolveFeatureAccess(request, env, identity, productKey, featureKey);
   if (access.response) return access.response;
-  const now = new Date().toISOString();
-  const result = await env.CORE_DB.prepare("INSERT INTO feature_usage (account_id,product_key,feature_key,used_count,created_at,updated_at) VALUES (?,?,?,1,?,?) ON CONFLICT(account_id,product_key,feature_key) DO UPDATE SET used_count=feature_usage.used_count+1,updated_at=excluded.updated_at WHERE (? IS NULL OR feature_usage.used_count < ?)").bind(access.account.account_id, productKey, featureKey, now, now, access.limit ?? null, access.limit ?? null).run();
-  if (result?.meta?.changes !== 1) {
-    const current = await env.CORE_DB.prepare("SELECT used_count FROM feature_usage WHERE account_id=? AND product_key=? AND feature_key=?").bind(access.account.account_id, productKey, featureKey).first();
-    return json({ allowed: false, reason: "usage_limit_reached", used_count: current?.used_count || 0, usage_limit: access.limit }, 403);
+  const usage = await incrementFeatureUsage(env, access, productKey, featureKey);
+  if (!usage.consumed) {
+    return json({ allowed: false, reason: "usage_limit_reached", used_count: usage.usedCount, usage_limit: access.limit }, 403);
   }
-  const current = await env.CORE_DB.prepare("SELECT used_count FROM feature_usage WHERE account_id=? AND product_key=? AND feature_key=?").bind(access.account.account_id, productKey, featureKey).first();
-  const usedCount = current?.used_count || access.usedCount + 1;
-  return json({ allowed: true, consumed: true, product_key: productKey, feature_key: featureKey, access_source: access.source, used_count: usedCount, usage_limit: access.limit, remaining_uses: access.limit == null ? null : Math.max(0, access.limit - usedCount) });
+  return json({ allowed: true, consumed: true, product_key: productKey, feature_key: featureKey, access_source: access.source, used_count: usage.usedCount, usage_limit: access.limit, remaining_uses: access.limit == null ? null : Math.max(0, access.limit - usage.usedCount) });
 }
 
 async function handle(request, env = {}) {
@@ -508,4 +518,4 @@ export default {
   }
 };
 
-export { handle, API_VERSION, databaseHealth, verifyFirebaseIdToken, resolveCentralIdentity, resolveFeatureAccess };
+export { handle, API_VERSION, databaseHealth, verifyFirebaseIdToken, resolveCentralIdentity, resolveFeatureAccess, incrementFeatureUsage };
