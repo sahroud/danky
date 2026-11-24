@@ -419,19 +419,14 @@ async function checkFeatureAccess(request, env, productKey, featureKey) {
 }
 
 async function incrementFeatureUsage(env, access, productKey, featureKey, now = new Date().toISOString()) {
-  // The INSERT guard is essential for a zero limit: ON CONFLICT alone only guards updates.
-  // The conflict update is also conditional, so concurrent requests cannot exceed a finite limit.
-  const result = await env.CORE_DB.prepare(
-    "INSERT INTO feature_usage (account_id,product_key,feature_key,used_count,created_at,updated_at) SELECT ?,?,?,1,?,? WHERE (? IS NULL OR ? > 0) ON CONFLICT(account_id,product_key,feature_key) DO UPDATE SET used_count=feature_usage.used_count+1,updated_at=excluded.updated_at WHERE (? IS NULL OR feature_usage.used_count < ?)"
-  ).bind(access.account.account_id, productKey, featureKey, now, now, access.limit ?? null, access.limit ?? null, access.limit ?? null, access.limit ?? null).run();
-  if (result?.meta?.changes !== 1) {
-    const current = await env.CORE_DB.prepare("SELECT used_count FROM feature_usage WHERE account_id=? AND product_key=? AND feature_key=?").bind(access.account.account_id, productKey, featureKey).first();
-    return { consumed: false, usedCount: current?.used_count || 0 };
-  }
-  const current = await env.CORE_DB.prepare("SELECT used_count FROM feature_usage WHERE account_id=? AND product_key=? AND feature_key=?").bind(access.account.account_id, productKey, featureKey).first();
-  return { consumed: true, usedCount: current?.used_count || access.usedCount + 1 };
+  // A single conditional UPSERT enforces finite limits under concurrent requests.
+  // RETURNING reports the count produced by this exact statement, avoiding a racy follow-up read.
+  const row = await env.CORE_DB.prepare(
+    "INSERT INTO feature_usage (account_id,product_key,feature_key,used_count,created_at,updated_at) SELECT ?,?,?,1,?,? WHERE (? IS NULL OR ? > 0) ON CONFLICT(account_id,product_key,feature_key) DO UPDATE SET used_count=feature_usage.used_count+1,updated_at=excluded.updated_at WHERE (? IS NULL OR feature_usage.used_count < ?) RETURNING used_count"
+  ).bind(access.account.account_id, productKey, featureKey, now, now, access.limit ?? null, access.limit ?? null, access.limit ?? null, access.limit ?? null).first();
+  if (!row) return { consumed: false, usedCount: access.usedCount || 0 };
+  return { consumed: true, usedCount: row.used_count };
 }
-
 async function consumeFeatureUsage(request, env, productKey, featureKey) {
   const identity = await verifyFirebaseIdToken(bearerToken(request), env);
   const access = await resolveFeatureAccess(request, env, identity, productKey, featureKey);
