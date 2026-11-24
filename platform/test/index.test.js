@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { handle } from "../src/index.js";
+import { handle, resolveCentralIdentity } from "../src/index.js";
 
 const request = (path, options = {}) =>
   new Request(`https://central.test${path}`, options);
@@ -58,4 +58,45 @@ test("CORS preflight advertises account selection header", async () => {
   }), { CORS_ALLOWED_ORIGINS: "https://sahroud.github.io" });
   assert.equal(response.status, 204);
   assert.match(response.headers.get("access-control-allow-headers"), /X-Sahroud-Account-Id/i);
+});
+
+
+test("identity resolution does not choose an arbitrary account when multiple memberships exist", async () => {
+  const db = {
+    prepare(sql) {
+      assert.match(sql, /FROM account_identities/);
+      return {
+        bind(subject) {
+          assert.equal(subject, "firebase-user-1");
+          return this;
+        },
+        async all() {
+          return { results: [
+            { principal_id: "principal-1", account_id: "account-a" },
+            { principal_id: "principal-1", account_id: "account-b" }
+          ] };
+        }
+      };
+    }
+  };
+  const identity = await resolveCentralIdentity({ CORE_DB: db }, { subject: "firebase-user-1" });
+  assert.equal(identity.principalId, "principal-1");
+  assert.equal(identity.accountId, null);
+  assert.deepEqual(identity.accountIds, ["account-a", "account-b"]);
+});
+
+test("identity resolution keeps the single-account compatibility field", async () => {
+  const db = {
+    prepare() {
+      return {
+        bind() { return this; },
+        async all() {
+          return { results: [{ principal_id: "principal-1", account_id: "account-a" }] };
+        }
+      };
+    }
+  };
+  const identity = await resolveCentralIdentity({ CORE_DB: db }, { subject: "firebase-user-1" });
+  assert.equal(identity.accountId, "account-a");
+  assert.deepEqual(identity.accountIds, ["account-a"]);
 });
