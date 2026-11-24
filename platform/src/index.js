@@ -358,12 +358,14 @@ async function adminUpsertFeature(request, env, productKey, featureKey) {
   const product = await env.CORE_DB.prepare("SELECT product_key FROM products WHERE product_key=?").bind(productKey).first();
   if (!product) return json({ error: "product_not_found" }, 404);
   const now = new Date().toISOString();
-  await env.CORE_DB.prepare(
-    "INSERT INTO product_features (product_key,feature_key,display_name,description,is_enabled,access_mode,price_amount,currency,trial_days,usage_limit,created_at,updated_at,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(product_key,feature_key) DO UPDATE SET display_name=excluded.display_name,description=excluded.description,is_enabled=excluded.is_enabled,access_mode=excluded.access_mode,price_amount=excluded.price_amount,currency=excluded.currency,trial_days=excluded.trial_days,usage_limit=excluded.usage_limit,updated_at=excluded.updated_at,updated_by=excluded.updated_by"
-  ).bind(productKey, featureKey, name, description, enabled ? 1 : 0, mode, price, currency, trialDays, usageLimit, now, now, identity.subject).run();
-  await env.CORE_DB.prepare(
-    "INSERT INTO audit_events (id,account_id,product_key,event_type,target_type,target_id,outcome,created_at,metadata_json) VALUES (?,NULL,?,'feature_settings_changed','product_feature',?,'success',?,?)"
-  ).bind(crypto.randomUUID(), productKey, featureKey, now, JSON.stringify({ access_mode: mode, is_enabled: enabled, actor_uid: identity.subject })).run();
+  await env.CORE_DB.batch([
+    env.CORE_DB.prepare(
+      "INSERT INTO product_features (product_key,feature_key,display_name,description,is_enabled,access_mode,price_amount,currency,trial_days,usage_limit,created_at,updated_at,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(product_key,feature_key) DO UPDATE SET display_name=excluded.display_name,description=excluded.description,is_enabled=excluded.is_enabled,access_mode=excluded.access_mode,price_amount=excluded.price_amount,currency=excluded.currency,trial_days=excluded.trial_days,usage_limit=excluded.usage_limit,updated_at=excluded.updated_at,updated_by=excluded.updated_by"
+    ).bind(productKey, featureKey, name, description, enabled ? 1 : 0, mode, price, currency, trialDays, usageLimit, now, now, identity.subject),
+    env.CORE_DB.prepare(
+      "INSERT INTO audit_events (id,account_id,product_key,event_type,target_type,target_id,outcome,created_at,metadata_json) VALUES (?,NULL,?,'feature_settings_changed','product_feature',?,'success',?,?)"
+    ).bind(crypto.randomUUID(), productKey, featureKey, now, JSON.stringify({ access_mode: mode, is_enabled: enabled, actor_uid: identity.subject }))
+  ]);
   return json({ saved: true, product_key: productKey, feature_key: featureKey, enabled, access_mode: mode, api_version: API_VERSION });
 }
 
