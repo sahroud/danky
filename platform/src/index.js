@@ -508,4 +508,4 @@ export default {
   }
 };
 
-export { handle, API_VERSION, databaseHealth, verifyFirebaseIdToken, resolveCentralIdentity };
+export { handle, API_VERSION, databaseHealth, verifyFirebaseIdToken, resolveCentralIdentity, resolveFeatureAccess };
