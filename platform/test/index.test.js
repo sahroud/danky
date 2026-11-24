@@ -221,7 +221,7 @@ test("usage counter rejects a zero limit before inserting the first use", async 
         insertSql = sql;
         return {
           bind(...args) { insertBindings = args; return this; },
-          async run() { return { meta: { changes: 0 } }; }
+          async first() { return null; }
         };
       }
       return {
@@ -254,7 +254,7 @@ test("usage counter uses a conditional atomic increment for finite limits", asyn
         insertSql = sql;
         return {
           bind() { return this; },
-          async run() { return { meta: { changes: 1 } }; }
+          async first() { return { used_count: 1 }; }
         };
       }
       return {
