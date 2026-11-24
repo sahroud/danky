@@ -32,7 +32,7 @@ function corsHeaders(request, env) {
   return {
     "access-control-allow-origin": origin,
     "access-control-allow-methods": "GET, POST, OPTIONS",
-    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-headers": "Content-Type, Authorization, X-Sahroud-Account-Id",
     "access-control-max-age": "600",
     "vary": "Origin"
   };
