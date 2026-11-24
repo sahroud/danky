@@ -1,0 +1,61 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { handle } from "../src/index.js";
+
+const request = (path, options = {}) =>
+  new Request(`https://central.test${path}`, options);
+
+test("health reports a configured central database", async () => {
+  const env = {
+    CORE_DB: {
+      prepare(sql) {
+        assert.match(sql, /SELECT 1 AS ok/);
+        return { first: async () => ({ ok: 1 }) };
+      }
+    }
+  };
+  const response = await handle(request("/health"), env);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.status, "ok");
+  assert.equal(body.dependencies.core_db, "ok");
+});
+
+test("version endpoint is available without database access", async () => {
+  const response = await handle(request("/v1/version"), {});
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.service, "sahroud-central-api");
+  assert.equal(body.api_version, "0.3.0");
+});
+
+test("catalog reports missing central database instead of pretending success", async () => {
+  const response = await handle(request("/v1/catalog/products"), {});
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error, "core_database_not_configured");
+});
+
+test("allowed browser origin receives CORS headers", async () => {
+  const response = await handle(request("/v1/version", {
+    headers: { Origin: "https://sahroud.github.io" }
+  }), { CORS_ALLOWED_ORIGINS: "https://sahroud.github.io" });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("access-control-allow-origin"), "https://sahroud.github.io");
+});
+
+test("disallowed browser origin is rejected", async () => {
+  const response = await handle(request("/v1/version", {
+    headers: { Origin: "https://example.invalid" }
+  }), { CORS_ALLOWED_ORIGINS: "https://sahroud.github.io" });
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error, "origin_not_allowed");
+});
+
+test("CORS preflight advertises account selection header", async () => {
+  const response = await handle(request("/v1/access/steel/dxf-export", {
+    method: "OPTIONS",
+    headers: { Origin: "https://sahroud.github.io" }
+  }), { CORS_ALLOWED_ORIGINS: "https://sahroud.github.io" });
+  assert.equal(response.status, 204);
+  assert.match(response.headers.get("access-control-allow-headers"), /X-Sahroud-Account-Id/i);
+});
