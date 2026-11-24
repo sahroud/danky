@@ -362,24 +362,52 @@ async function adminUpsertFeature(request, env, productKey, featureKey) {
   return json({ saved: true, product_key: productKey, feature_key: featureKey, enabled, access_mode: mode, api_version: API_VERSION });
 }
 
+async function resolveFeatureAccess(env, identity, productKey, featureKey) {
+  const account = await requireCentralAccount(env, identity);
+  if (!/^[a-z0-9-]{2,64}$/.test(productKey) || !/^[a-z0-9][a-z0-9._-]{1,80}$/.test(featureKey)) return { response: json({ error: "invalid_product_or_feature_key" }, 400) };
+  const feature = await env.CORE_DB.prepare("SELECT f.is_enabled,f.access_mode,f.usage_limit,p.lifecycle_status FROM product_features f JOIN products p ON p.product_key=f.product_key WHERE f.product_key=? AND f.feature_key=?").bind(productKey, featureKey).first();
+  if (!feature) return { response: json({ allowed: false, reason: "feature_not_registered" }, 404) };
+  if (feature.lifecycle_status === "retired" || feature.is_enabled !== 1 || feature.access_mode === "disabled") return { response: json({ allowed: false, reason: "feature_disabled" }, 403) };
+
+  let source = "free", sourceId = "free", limit = feature.usage_limit;
+  if (feature.access_mode === "paid") {
+    const now = new Date().toISOString();
+    const grant = await env.CORE_DB.prepare("SELECT id,usage_limit FROM account_feature_grants WHERE account_id=? AND product_key=? AND feature_key=? AND status='active' AND (starts_at IS NULL OR starts_at<=?) AND (ends_at IS NULL OR ends_at>?) ORDER BY created_at DESC LIMIT 1").bind(account.account_id, productKey, featureKey, now, now).first();
+    if (grant) {
+      source = "grant"; sourceId = grant.id;
+      if (grant.usage_limit !== null && grant.usage_limit !== undefined) limit = grant.usage_limit;
+    } else {
+      const subscription = await env.CORE_DB.prepare("SELECT s.id FROM subscriptions s JOIN plans p ON p.product_key=s.product_key AND p.plan_code=s.plan_code JOIN plan_features pf ON pf.product_key=s.product_key AND pf.plan_code=s.plan_code WHERE s.account_id=? AND s.product_key=? AND pf.feature_key=? AND s.status='active' AND p.is_active=1 AND (s.starts_at IS NULL OR s.starts_at<=?) AND (s.ends_at IS NULL OR s.ends_at>?) ORDER BY s.created_at DESC LIMIT 1").bind(account.account_id, productKey, featureKey, now, now).first();
+      if (!subscription) return { response: json({ allowed: false, reason: "purchase_or_subscription_required", product_key: productKey, feature_key: featureKey }, 403) };
+      source = "subscription"; sourceId = subscription.id;
+    }
+  }
+  const usage = await env.CORE_DB.prepare("SELECT used_count FROM feature_usage WHERE account_id=? AND product_key=? AND feature_key=?").bind(account.account_id, productKey, featureKey).first();
+  const usedCount = usage?.used_count || 0;
+  if (limit !== null && limit !== undefined && usedCount >= limit) return { response: json({ allowed: false, reason: "usage_limit_reached", used_count: usedCount, usage_limit: limit }, 403) };
+  return { account, source, sourceId, limit, usedCount };
+}
+
 async function checkFeatureAccess(request, env, productKey, featureKey) {
   const identity = await verifyFirebaseIdToken(bearerToken(request), env);
-  const account = await requireCentralAccount(env, identity);
-  if (!/^[a-z0-9-]{2,64}$/.test(productKey) || !/^[a-z0-9][a-z0-9._-]{1,80}$/.test(featureKey)) return json({ error: "invalid_product_or_feature_key" }, 400);
-  const feature = await env.CORE_DB.prepare(
-    "SELECT f.is_enabled,f.access_mode,f.usage_limit,p.lifecycle_status FROM product_features f JOIN products p ON p.product_key=f.product_key WHERE f.product_key=? AND f.feature_key=?"
-  ).bind(productKey, featureKey).first();
-  if (!feature) return json({ allowed: false, reason: "feature_not_registered" }, 404);
-  if (feature.lifecycle_status === "retired" || feature.is_enabled !== 1 || feature.access_mode === "disabled") {
-    return json({ allowed: false, reason: "feature_disabled" }, 403);
-  }
-  if (feature.access_mode === "free") return json({ allowed: true, reason: "free_feature", product_key: productKey, feature_key: featureKey, usage_limit: feature.usage_limit });
+  const access = await resolveFeatureAccess(env, identity, productKey, featureKey);
+  if (access.response) return access.response;
+  return json({ allowed: true, reason: access.source === "free" ? "free_feature" : access.source === "grant" ? "active_feature_grant" : "active_plan_subscription", product_key: productKey, feature_key: featureKey, access_source: access.source, usage_limit: access.limit, used_count: access.usedCount, remaining_uses: access.limit == null ? null : Math.max(0, access.limit - access.usedCount) });
+}
+
+async function consumeFeatureUsage(request, env, productKey, featureKey) {
+  const identity = await verifyFirebaseIdToken(bearerToken(request), env);
+  const access = await resolveFeatureAccess(env, identity, productKey, featureKey);
+  if (access.response) return access.response;
   const now = new Date().toISOString();
-  const grant = await env.CORE_DB.prepare(
-    "SELECT id,usage_limit,ends_at FROM account_feature_grants WHERE account_id=? AND product_key=? AND feature_key=? AND status='active' AND (starts_at IS NULL OR starts_at<=?) AND (ends_at IS NULL OR ends_at>?) ORDER BY created_at DESC LIMIT 1"
-  ).bind(account.account_id, productKey, featureKey, now, now).first();
-  if (!grant) return json({ allowed: false, reason: "purchase_or_subscription_required", product_key: productKey, feature_key: featureKey }, 403);
-  return json({ allowed: true, reason: "active_feature_grant", product_key: productKey, feature_key: featureKey, grant_id: grant.id, usage_limit: grant.usage_limit ?? feature.usage_limit, valid_until: grant.ends_at });
+  const result = await env.CORE_DB.prepare("INSERT INTO feature_usage (account_id,product_key,feature_key,used_count,created_at,updated_at) VALUES (?,?,?,1,?,?) ON CONFLICT(account_id,product_key,feature_key) DO UPDATE SET used_count=feature_usage.used_count+1,updated_at=excluded.updated_at WHERE (? IS NULL OR feature_usage.used_count < ?)").bind(access.account.account_id, productKey, featureKey, now, now, access.limit ?? null, access.limit ?? null).run();
+  if (result?.meta?.changes !== 1) {
+    const current = await env.CORE_DB.prepare("SELECT used_count FROM feature_usage WHERE account_id=? AND product_key=? AND feature_key=?").bind(access.account.account_id, productKey, featureKey).first();
+    return json({ allowed: false, reason: "usage_limit_reached", used_count: current?.used_count || 0, usage_limit: access.limit }, 403);
+  }
+  const current = await env.CORE_DB.prepare("SELECT used_count FROM feature_usage WHERE account_id=? AND product_key=? AND feature_key=?").bind(access.account.account_id, productKey, featureKey).first();
+  const usedCount = current?.used_count || access.usedCount + 1;
+  return json({ allowed: true, consumed: true, product_key: productKey, feature_key: featureKey, access_source: access.source, used_count: usedCount, usage_limit: access.limit, remaining_uses: access.limit == null ? null : Math.max(0, access.limit - usedCount) });
 }
 
 async function handle(request, env = {}) {
@@ -425,6 +453,9 @@ async function handle(request, env = {}) {
   } else if (request.method === "GET" && /^\/v1\/access\/[a-z0-9-]+\/[a-z0-9][a-z0-9._-]{1,80}$/.test(url.pathname)) {
     const parts = url.pathname.split("/");
     response = await checkFeatureAccess(request, env, parts[3], parts[4]);
+  } else if (request.method === "POST" && /^\\/v1\\/access\\/[a-z0-9-]+\\/[a-z0-9][a-z0-9._-]{1,80}\\/consume$/.test(url.pathname)) {
+    const parts = url.pathname.split("/");
+    response = await consumeFeatureUsage(request, env, parts[3], parts[4]);
   } else if (request.method === "GET" && url.pathname === "/v1/me") {
     response = await currentUser(request, env);
   } else if (url.pathname === "/v1/auth/session") {
