@@ -402,7 +402,7 @@ async function checkFeatureAccess(request, env, productKey, featureKey) {
 
 async function consumeFeatureUsage(request, env, productKey, featureKey) {
   const identity = await verifyFirebaseIdToken(bearerToken(request), env);
-  const access = await resolveFeatureAccess(env, identity, productKey, featureKey);
+  const access = await resolveFeatureAccess(request, env, identity, productKey, featureKey);
   if (access.response) return access.response;
   const now = new Date().toISOString();
   const result = await env.CORE_DB.prepare("INSERT INTO feature_usage (account_id,product_key,feature_key,used_count,created_at,updated_at) VALUES (?,?,?,1,?,?) ON CONFLICT(account_id,product_key,feature_key) DO UPDATE SET used_count=feature_usage.used_count+1,updated_at=excluded.updated_at WHERE (? IS NULL OR feature_usage.used_count < ?)").bind(access.account.account_id, productKey, featureKey, now, now, access.limit ?? null, access.limit ?? null).run();
