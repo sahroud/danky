@@ -275,3 +275,64 @@ test("usage counter uses a conditional atomic increment for finite limits", asyn
   assert.match(insertSql, /ON CONFLICT\(account_id,product_key,feature_key\) DO UPDATE/);
   assert.match(insertSql, /WHERE \(\? IS NULL OR feature_usage\.used_count < \?\)/);
 });
+
+
+function expiryDatabase({ feature = { is_enabled: 1, access_mode: "paid", usage_limit: null, lifecycle_status: "active" } } = {}) {
+  const queries = [];
+  return {
+    queries,
+    prepare(sql) {
+      return {
+        bind(...args) { queries.push({ sql, args }); return this; },
+        async all() {
+          if (sql.includes("FROM account_identities")) return { results: [{ principal_id: "principal-1", principal_status: "active", account_id: "account-a", account_status: "active" }] };
+          return { results: [] };
+        },
+        async first() {
+          if (sql.includes("FROM product_features")) return feature;
+          if (sql.includes("FROM account_feature_grants")) return null;
+          if (sql.includes("FROM subscriptions")) return null;
+          if (sql.includes("FROM feature_usage")) return null;
+          return null;
+        }
+      };
+    }
+  };
+}
+
+test("grant lookup enforces start and end timestamps using the same current instant", async () => {
+  const db = expiryDatabase();
+  const access = await resolveFeatureAccess(entitlementRequest(), { CORE_DB: db }, testIdentity, "steel", "dxf-export");
+  assert.equal(access.response.status, 403);
+  const grantQuery = db.queries.find(q => q.sql.includes("FROM account_feature_grants"));
+  assert.match(grantQuery.sql, /starts_at IS NULL OR starts_at<=\?/);
+  assert.match(grantQuery.sql, /ends_at IS NULL OR ends_at>\?/);
+  assert.equal(grantQuery.args[3], grantQuery.args[4]);
+  assert.match(db.queries.find(q => q.sql.includes("FROM subscriptions")).sql, /starts_at IS NULL OR s.starts_at<=\?/);
+});
+
+test("subscription lookup enforces start, end, and active plan status", async () => {
+  const db = expiryDatabase();
+  await resolveFeatureAccess(entitlementRequest(), { CORE_DB: db }, testIdentity, "steel", "dxf-export");
+  const sub = db.queries.find(q => q.sql.includes("FROM subscriptions"));
+  assert.match(sub.sql, /s.status='active'/);
+  assert.match(sub.sql, /p.is_active=1/);
+  assert.match(sub.sql, /s.starts_at IS NULL OR s.starts_at<=\?/);
+  assert.match(sub.sql, /s.ends_at IS NULL OR s.ends_at>\?/);
+  assert.equal(sub.args[3], sub.args[4]);
+});
+
+test("grant lookup ignores grants whose status is not active", async () => {
+  const db = expiryDatabase();
+  await resolveFeatureAccess(entitlementRequest(), { CORE_DB: db }, testIdentity, "steel", "dxf-export");
+  const grant = db.queries.find(q => q.sql.includes("FROM account_feature_grants"));
+  assert.match(grant.sql, /status='active'/);
+});
+
+test("subscription lookup requires a matching plan feature mapping", async () => {
+  const db = expiryDatabase();
+  await resolveFeatureAccess(entitlementRequest(), { CORE_DB: db }, testIdentity, "steel", "dxf-export");
+  const sub = db.queries.find(q => q.sql.includes("FROM subscriptions"));
+  assert.match(sub.sql, /JOIN plan_features pf/);
+  assert.match(sub.sql, /pf.feature_key=\?/);
+});
