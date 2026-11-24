@@ -125,4 +125,33 @@ except sqlite3.IntegrityError:
 else:
     raise AssertionError("Duplicate license hash was accepted")
 
+
+# Feature-level plan mapping and lifetime usage counters must be enforceable.
+connection.execute(
+    "INSERT INTO product_features "
+    "(product_key, feature_key, display_name, access_mode, created_at, updated_at) "
+    "VALUES ('steel', 'dxf-export', 'DXF export', 'paid', 'now', 'now')"
+)
+connection.execute(
+    "INSERT INTO plan_features (product_key, plan_code, feature_key, created_at) "
+    "VALUES ('steel', 'free', 'dxf-export', 'now')"
+)
+connection.execute(
+    "INSERT INTO feature_usage "
+    "(account_id, product_key, feature_key, used_count, created_at, updated_at) "
+    "VALUES ('a1', 'steel', 'dxf-export', 2, 'now', 'now')"
+)
+usage_count = connection.execute(
+    "SELECT used_count FROM feature_usage "
+    "WHERE account_id='a1' AND product_key='steel' AND feature_key='dxf-export'"
+).fetchone()[0]
+assert usage_count == 2, "Feature usage counter must persist account-level totals"
+
+mapped_features = connection.execute(
+    "SELECT COUNT(*) FROM plan_features pf "
+    "JOIN subscriptions s ON s.product_key=pf.product_key AND s.plan_code=pf.plan_code "
+    "WHERE s.account_id='a1' AND s.status='active' AND pf.feature_key='dxf-export'"
+).fetchone()[0]
+assert mapped_features == 1, "Active product plans must map to included features"
+
 print("SAHROUD Central schema tests passed")
