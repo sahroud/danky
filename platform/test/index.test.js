@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { handle, resolveCentralIdentity, resolveFeatureAccess } from "../src/index.js";
+import { handle, resolveCentralIdentity, resolveFeatureAccess, incrementFeatureUsage } from "../src/index.js";
 
 const request = (path, options = {}) =>
   new Request(`https://central.test${path}`, options);
@@ -209,4 +209,69 @@ test("selected account must belong to the authenticated identity", async () => {
     }, testIdentity, "steel", "dxf-export"),
     error => error.message === "account_membership_required" && error.status === 403
   );
+});
+
+
+test("usage counter rejects a zero limit before inserting the first use", async () => {
+  let insertSql = "";
+  let insertBindings = [];
+  const db = {
+    prepare(sql) {
+      if (sql.startsWith("INSERT INTO feature_usage")) {
+        insertSql = sql;
+        return {
+          bind(...args) { insertBindings = args; return this; },
+          async run() { return { meta: { changes: 0 } }; }
+        };
+      }
+      return {
+        bind() { return this; },
+        async first() { return null; }
+      };
+    }
+  };
+  const result = await incrementFeatureUsage(
+    { CORE_DB: db },
+    { account: { account_id: "account-a" }, limit: 0, usedCount: 0 },
+    "steel",
+    "dxf-export",
+    "2026-11-24T00:00:00.000Z"
+  );
+  assert.equal(result.consumed, false);
+  assert.equal(result.usedCount, 0);
+  assert.match(insertSql, /INSERT INTO feature_usage .* SELECT /);
+  assert.match(insertSql, /WHERE \(\? IS NULL OR \? > 0\)/);
+  assert.match(insertSql, /feature_usage\.used_count < \?/);
+  assert.equal(insertBindings[5], 0);
+  assert.equal(insertBindings[7], 0);
+});
+
+test("usage counter uses a conditional atomic increment for finite limits", async () => {
+  let insertSql = "";
+  const db = {
+    prepare(sql) {
+      if (sql.startsWith("INSERT INTO feature_usage")) {
+        insertSql = sql;
+        return {
+          bind() { return this; },
+          async run() { return { meta: { changes: 1 } }; }
+        };
+      }
+      return {
+        bind() { return this; },
+        async first() { return { used_count: 1 }; }
+      };
+    }
+  };
+  const result = await incrementFeatureUsage(
+    { CORE_DB: db },
+    { account: { account_id: "account-a" }, limit: 1, usedCount: 0 },
+    "steel",
+    "dxf-export",
+    "2026-11-24T00:00:00.000Z"
+  );
+  assert.equal(result.consumed, true);
+  assert.equal(result.usedCount, 1);
+  assert.match(insertSql, /ON CONFLICT\(account_id,product_key,feature_key\) DO UPDATE/);
+  assert.match(insertSql, /WHERE \(\? IS NULL OR feature_usage\.used_count < \?\)/);
 });
