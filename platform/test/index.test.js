@@ -336,3 +336,36 @@ test("subscription lookup requires a matching plan feature mapping", async () =>
   assert.match(sub.sql, /JOIN plan_features pf/);
   assert.match(sub.sql, /pf.feature_key=\?/);
 });
+
+
+test("concurrent consume attempts never exceed a finite usage limit (atomic D1 mock)", async () => {
+  let usedCount = 0;
+  const limit = 5;
+  const db = {
+    prepare(sql) {
+      assert.match(sql, /ON CONFLICT/);
+      assert.match(sql, /RETURNING used_count/);
+      return {
+        bind(...args) {
+          return {
+            async first() {
+              // Model the atomic conditional UPSERT as one indivisible operation.
+              if (args[5] !== null && args[5] <= 0) return null;
+              if (args[7] !== null && usedCount >= args[7]) return null;
+              usedCount += 1;
+              return { used_count: usedCount };
+            }
+          };
+        }
+      };
+    }
+  };
+  const access = { account: { account_id: "account-a" }, limit, usedCount: 0 };
+  const attempts = await Promise.all(Array.from({ length: 40 }, () =>
+    incrementFeatureUsage({ CORE_DB: db }, access, "steel", "dxf-export", "2026-11-24T00:00:00.000Z")
+  ));
+  assert.equal(attempts.filter(x => x.consumed).length, limit);
+  assert.equal(attempts.filter(x => !x.consumed).length, 40 - limit);
+  assert.equal(usedCount, limit);
+  assert.deepEqual(attempts.filter(x => x.consumed).map(x => x.usedCount).sort((a,b) => a-b), [1,2,3,4,5]);
+});
