@@ -27,6 +27,9 @@ required = {
     "entitlements",
     "license_keys",
     "audit_events",
+    "product_features",
+    "account_feature_grants",
+    "plan_features",
 }
 assert required.issubset(tables), f"Missing tables: {required - tables}"
 
