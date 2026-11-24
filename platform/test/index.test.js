@@ -220,7 +220,7 @@ test("usage counter rejects a zero limit before inserting the first use", async 
       if (sql.startsWith("INSERT INTO feature_usage")) {
         insertSql = sql;
         return {
-          bind(...args) { insertBindings = args; return this; },
+          bind(...args) { insertBindings = args; return { first: async () => null }; },
           async first() { return null; }
         };
       }
@@ -253,7 +253,7 @@ test("usage counter uses a conditional atomic increment for finite limits", asyn
       if (sql.startsWith("INSERT INTO feature_usage")) {
         insertSql = sql;
         return {
-          bind() { return this; },
+          bind() { return { first: async () => ({ used_count: 1 }) }; },
           async first() { return { used_count: 1 }; }
         };
       }
