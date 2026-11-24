@@ -298,15 +298,20 @@ function isCentralAdmin(identity, env) {
   return String(env?.CENTRAL_ADMIN_UIDS || "").split(",").map(v => v.trim()).filter(Boolean).includes(identity.subject);
 }
 
-async function requireCentralAccount(env, identity) {
+async function requireCentralAccount(env, identity, requestedAccountId = null) {
   if (!env?.CORE_DB) throw Object.assign(new Error("core_database_not_configured"), { status: 503 });
-  const row = await env.CORE_DB.prepare(
-    "SELECT p.id AS principal_id, p.status AS principal_status, a.id AS account_id, a.status AS account_status FROM account_identities ai JOIN principals p ON p.id=ai.principal_id JOIN account_memberships am ON am.principal_id=p.id AND am.status='active' JOIN accounts a ON a.id=am.account_id WHERE ai.provider='firebase' AND ai.provider_subject=? ORDER BY am.created_at LIMIT 1"
-  ).bind(identity.subject).first();
-  if (!row || row.principal_status !== "active" || row.account_status !== "active") {
-    throw Object.assign(new Error("active_central_account_required"), { status: 403 });
+  const rows = await env.CORE_DB.prepare(
+    "SELECT p.id AS principal_id, p.status AS principal_status, a.id AS account_id, a.status AS account_status FROM account_identities ai JOIN principals p ON p.id=ai.principal_id JOIN account_memberships am ON am.principal_id=p.id AND am.status='active' JOIN accounts a ON a.id=am.account_id AND a.status='active' WHERE ai.provider='firebase' AND ai.provider_subject=? AND p.status='active' ORDER BY am.created_at"
+  ).bind(identity.subject).all();
+  const active = rows.results || [];
+  if (requestedAccountId) {
+    const selected = active.find(row => row.account_id === requestedAccountId);
+    if (!selected) throw Object.assign(new Error("account_membership_required"), { status: 403 });
+    return selected;
   }
-  return row;
+  if (active.length === 0) throw Object.assign(new Error("active_central_account_required"), { status: 403 });
+  if (active.length > 1) throw Object.assign(new Error("account_selection_required"), { status: 409 });
+  return active[0];
 }
 
 async function adminFeatureList(request, env, productKey) {
@@ -362,8 +367,8 @@ async function adminUpsertFeature(request, env, productKey, featureKey) {
   return json({ saved: true, product_key: productKey, feature_key: featureKey, enabled, access_mode: mode, api_version: API_VERSION });
 }
 
-async function resolveFeatureAccess(env, identity, productKey, featureKey) {
-  const account = await requireCentralAccount(env, identity);
+async function resolveFeatureAccess(request, env, identity, productKey, featureKey) {
+  const account = await requireCentralAccount(env, identity, request.headers.get('X-Sahroud-Account-Id'));
   if (!/^[a-z0-9-]{2,64}$/.test(productKey) || !/^[a-z0-9][a-z0-9._-]{1,80}$/.test(featureKey)) return { response: json({ error: "invalid_product_or_feature_key" }, 400) };
   const feature = await env.CORE_DB.prepare("SELECT f.is_enabled,f.access_mode,f.usage_limit,p.lifecycle_status FROM product_features f JOIN products p ON p.product_key=f.product_key WHERE f.product_key=? AND f.feature_key=?").bind(productKey, featureKey).first();
   if (!feature) return { response: json({ allowed: false, reason: "feature_not_registered" }, 404) };
@@ -390,7 +395,7 @@ async function resolveFeatureAccess(env, identity, productKey, featureKey) {
 
 async function checkFeatureAccess(request, env, productKey, featureKey) {
   const identity = await verifyFirebaseIdToken(bearerToken(request), env);
-  const access = await resolveFeatureAccess(env, identity, productKey, featureKey);
+  const access = await resolveFeatureAccess(request, env, identity, productKey, featureKey);
   if (access.response) return access.response;
   return json({ allowed: true, reason: access.source === "free" ? "free_feature" : access.source === "grant" ? "active_feature_grant" : "active_plan_subscription", product_key: productKey, feature_key: featureKey, access_source: access.source, usage_limit: access.limit, used_count: access.usedCount, remaining_uses: access.limit == null ? null : Math.max(0, access.limit - access.usedCount) });
 }
