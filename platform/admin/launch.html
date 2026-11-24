@@ -10,7 +10,7 @@
 #bar{min-height:58px;padding:9px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#102b3f;border-bottom:1px solid #34566b;position:relative;z-index:2;box-shadow:0 3px 14px #0004}
 #back{border:0;border-radius:11px;padding:11px 14px;background:#55d6be;color:#092b32;font:bold 14px Tahoma;cursor:pointer;white-space:nowrap}
 #caption{font-size:12px;color:#d3e6ef;flex:1;min-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#direct{font-size:12px;color:#b9e9ff;text-decoration:underline;white-space:nowrap}
+#direct{font-size:12px;color:#b9e9ff;text-decoration:underline;white-space:nowrap}#releaseInfo{width:100%;font-size:11px;color:#9ce6d8;line-height:1.8}
 #app{display:block;width:100%;height:calc(100dvh - 60px);border:0;background:white}
 #problem{display:none;padding:18px;line-height:2;color:#f3f8fb}
 </style>
@@ -20,30 +20,35 @@
 <button id="back" type="button">← بازگشت به درگاه یکپارچه</button>
 <div id="caption">در حال باز کردن نرم‌افزار…</div>
 <a id="direct" href="#" target="_blank" rel="noopener">بازکردن جداگانه</a>
+<div id="releaseInfo" aria-live="polite">در حال بررسی آخرین نسخه…</div>
 </div>
 <iframe id="app" title="نرم‌افزار انتخاب‌شده" referrerpolicy="strict-origin-when-cross-origin" allow="geolocation; camera; microphone; accelerometer; gyroscope; magnetometer; fullscreen" allowfullscreen></iframe>
 <div id="problem">نشانی نرم‌افزار معتبر نیست. به درگاه یکپارچه بازگردید و دوباره انتخاب کنید.</div>
 <script>
-(function(){
+(async function(){
  const params=new URLSearchParams(location.search);
- const raw=params.get("url");
- const frame=document.getElementById("app");
- const back=document.getElementById("back");
- const caption=document.getElementById("caption");
- const direct=document.getElementById("direct");
- const problem=document.getElementById("problem");
+ const raw=params.get("url"), appId=params.get("id");
+ const frame=document.getElementById("app"),back=document.getElementById("back");
+ const caption=document.getElementById("caption"),direct=document.getElementById("direct");
+ const problem=document.getElementById("problem"),releaseInfo=document.getElementById("releaseInfo");
  back.addEventListener("click",()=>{location.href=new URL("index.html",location.href).href;});
  try{
-   const target=new URL(raw);
-   if(target.protocol!=="https:" || target.hostname!=="sahroud.github.io") throw new Error("invalid target");
-   caption.textContent=target.pathname.replace(/\/$/,"").split("/").filter(Boolean).pop() || "نرم‌افزار SAHROUD";
-   direct.href=target.href;
-   frame.src=target.href;
+  const target=new URL(raw);
+  if(target.protocol!=="https:" || target.hostname!=="sahroud.github.io")throw new Error("invalid target");
+  let release=null;
+  try{
+   const response=await fetch(new URL("updates.json?check="+Date.now(),location.href),{cache:"no-store",headers:{"Accept":"application/json"}});
+   if(response.ok){const manifest=await response.json();release=manifest.apps?.[appId]||null;}
+  }catch{}
+  const refresh=Date.now().toString();
+  target.searchParams.set("sahroud_refresh",refresh);
+  if(release?.version)target.searchParams.set("sahroud_version",release.version);
+  caption.textContent=(release?.name||target.pathname.replace(/\/$/,"").split("/").filter(Boolean).pop()||"نرم‌افزار SAHROUD")+(release?.version?" · نسخه "+release.version:"");
+  releaseInfo.textContent=release?.notes?release.notes:"برای جلوگیری از بازشدن نسخه ذخیره‌شده، نشانی برنامه با شناسه تازه بارگذاری شد.";
+  direct.href=target.href;
+  frame.src=target.href;
  }catch(e){
-   caption.textContent="نشانی نامعتبر";
-   direct.style.display="none";
-   frame.style.display="none";
-   problem.style.display="block";
+  caption.textContent="نشانی نامعتبر";direct.style.display="none";frame.style.display="none";problem.style.display="block";releaseInfo.style.display="none";
  }
 })();
 </script>
