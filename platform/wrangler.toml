@@ -1,0 +1,15 @@
+name = "sahroud-central-api"
+main = "src/index.js"
+compatibility_date = "2026-11-22"
+workers_dev = true
+
+# Shared control-plane database only. Never bind product operational databases here.
+[[d1_databases]]
+binding = "CORE_DB"
+database_name = "sahroud-central"
+database_id = "f4824106-b05c-4d15-b131-dd943b08ff14"
+migrations_dir = "migrations"
+
+[vars]
+# Exact browser origins separated by commas. Native mobile clients do not need CORS.
+CORS_ALLOWED_ORIGINS = "https://sahroud.github.io"
