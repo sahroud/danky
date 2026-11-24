@@ -55,3 +55,5 @@ Set the Cloudflare Worker environment variable `CENTRAL_ADMIN_UIDS` to a comma-s
 6. Connect each product backend to the access and consume checks before enabling paid operations; then build the central administrator UI.
 
 Never apply this migration to `sahroud-family-guard`. Do not rely on hiding buttons in the browser: each paid operation must be checked by a trusted server endpoint before execution.
+
+For users who belong to multiple central accounts, feature access requires the `X-Sahroud-Account-Id` request header. The API validates that the signed-in principal has an active membership in that account. If the header is omitted and the user has more than one active account, the API returns `account_selection_required` rather than silently charging or consuming usage against an arbitrary account.
