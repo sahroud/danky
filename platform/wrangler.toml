@@ -13,3 +13,4 @@ migrations_dir = "migrations"
 [vars]
 # Exact browser origins separated by commas. Native mobile clients do not need CORS.
 CORS_ALLOWED_ORIGINS = "https://sahroud.github.io"
+FIREBASE_PROJECT_ID = "sahroud-central"

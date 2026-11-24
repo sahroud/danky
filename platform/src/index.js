@@ -282,6 +282,7 @@ async function currentUser(request, env) {
   return json({
     user: {
       principal_id: row.principal_id,
+      firebase_uid: identity.subject,
       status: row.principal_status,
       account_id: row.account_id,
       account_name: row.account_name,
@@ -290,6 +291,95 @@ async function currentUser(request, env) {
     },
     api_version: API_VERSION
   });
+}
+
+
+function isCentralAdmin(identity, env) {
+  return String(env?.CENTRAL_ADMIN_UIDS || "").split(",").map(v => v.trim()).filter(Boolean).includes(identity.subject);
+}
+
+async function requireCentralAccount(env, identity) {
+  if (!env?.CORE_DB) throw Object.assign(new Error("core_database_not_configured"), { status: 503 });
+  const row = await env.CORE_DB.prepare(
+    "SELECT p.id AS principal_id, p.status AS principal_status, a.id AS account_id, a.status AS account_status FROM account_identities ai JOIN principals p ON p.id=ai.principal_id JOIN account_memberships am ON am.principal_id=p.id AND am.status='active' JOIN accounts a ON a.id=am.account_id WHERE ai.provider='firebase' AND ai.provider_subject=? ORDER BY am.created_at LIMIT 1"
+  ).bind(identity.subject).first();
+  if (!row || row.principal_status !== "active" || row.account_status !== "active") {
+    throw Object.assign(new Error("active_central_account_required"), { status: 403 });
+  }
+  return row;
+}
+
+async function adminFeatureList(request, env, productKey) {
+  const identity = await verifyFirebaseIdToken(bearerToken(request), env);
+  if (!isCentralAdmin(identity, env)) return json({ error: "central_admin_required" }, 403);
+  if (!env?.CORE_DB) return json({ error: "core_database_not_configured" }, 503);
+  const product = await env.CORE_DB.prepare("SELECT product_key, display_name FROM products WHERE product_key=? AND lifecycle_status<>'retired'").bind(productKey).first();
+  if (!product) return json({ error: "product_not_found" }, 404);
+  const result = await env.CORE_DB.prepare(
+    "SELECT feature_key, display_name, description, is_enabled, access_mode, price_amount, currency, trial_days, usage_limit, updated_at FROM product_features WHERE product_key=? ORDER BY display_name"
+  ).bind(productKey).all();
+  return json({
+    product: { id: product.product_key, name: product.display_name },
+    features: (result.results || []).map(row => ({
+      key: row.feature_key, name: row.display_name, description: row.description,
+      enabled: row.is_enabled === 1, access_mode: row.access_mode,
+      price_amount: row.price_amount, currency: row.currency,
+      trial_days: row.trial_days, usage_limit: row.usage_limit, updated_at: row.updated_at
+    })),
+    api_version: API_VERSION
+  });
+}
+
+async function adminUpsertFeature(request, env, productKey, featureKey) {
+  const identity = await verifyFirebaseIdToken(bearerToken(request), env);
+  if (!isCentralAdmin(identity, env)) return json({ error: "central_admin_required" }, 403);
+  if (!env?.CORE_DB) return json({ error: "core_database_not_configured" }, 503);
+  if (!/^[a-z0-9-]{2,64}$/.test(productKey) || !/^[a-z0-9][a-z0-9._-]{1,80}$/.test(featureKey)) return json({ error: "invalid_product_or_feature_key" }, 400);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "invalid_json" }, 400); }
+  const name = typeof body?.display_name === "string" ? body.display_name.trim() : "";
+  const description = typeof body?.description === "string" ? body.description.trim().slice(0, 1000) : "";
+  const mode = body?.access_mode;
+  const enabled = body?.is_enabled;
+  const price = body?.price_amount ?? null;
+  const currency = typeof body?.currency === "string" ? body.currency.trim().toUpperCase() : "IRR";
+  const trialDays = body?.trial_days ?? 0;
+  const usageLimit = body?.usage_limit ?? null;
+  if (!name || name.length > 120 || !["free", "paid", "disabled"].includes(mode) ||
+      typeof enabled !== "boolean" || (price !== null && (!Number.isSafeInteger(price) || price < 0)) ||
+      !/^[A-Z]{3,8}$/.test(currency) || !Number.isInteger(trialDays) || trialDays < 0 || trialDays > 365 ||
+      (usageLimit !== null && (!Number.isSafeInteger(usageLimit) || usageLimit < 0))) return json({ error: "invalid_feature_settings" }, 400);
+  if (mode === "free" && price !== null) return json({ error: "free_feature_cannot_have_price" }, 400);
+  const product = await env.CORE_DB.prepare("SELECT product_key FROM products WHERE product_key=?").bind(productKey).first();
+  if (!product) return json({ error: "product_not_found" }, 404);
+  const now = new Date().toISOString();
+  await env.CORE_DB.prepare(
+    "INSERT INTO product_features (product_key,feature_key,display_name,description,is_enabled,access_mode,price_amount,currency,trial_days,usage_limit,created_at,updated_at,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(product_key,feature_key) DO UPDATE SET display_name=excluded.display_name,description=excluded.description,is_enabled=excluded.is_enabled,access_mode=excluded.access_mode,price_amount=excluded.price_amount,currency=excluded.currency,trial_days=excluded.trial_days,usage_limit=excluded.usage_limit,updated_at=excluded.updated_at,updated_by=excluded.updated_by"
+  ).bind(productKey, featureKey, name, description, enabled ? 1 : 0, mode, price, currency, trialDays, usageLimit, now, now, identity.subject).run();
+  await env.CORE_DB.prepare(
+    "INSERT INTO audit_events (id,account_id,product_key,event_type,target_type,target_id,outcome,created_at,metadata_json) VALUES (?,NULL,?,'feature_settings_changed','product_feature',?,'success',?,?)"
+  ).bind(crypto.randomUUID(), productKey, featureKey, now, JSON.stringify({ access_mode: mode, is_enabled: enabled, actor_uid: identity.subject })).run();
+  return json({ saved: true, product_key: productKey, feature_key: featureKey, enabled, access_mode: mode, api_version: API_VERSION });
+}
+
+async function checkFeatureAccess(request, env, productKey, featureKey) {
+  const identity = await verifyFirebaseIdToken(bearerToken(request), env);
+  const account = await requireCentralAccount(env, identity);
+  if (!/^[a-z0-9-]{2,64}$/.test(productKey) || !/^[a-z0-9][a-z0-9._-]{1,80}$/.test(featureKey)) return json({ error: "invalid_product_or_feature_key" }, 400);
+  const feature = await env.CORE_DB.prepare(
+    "SELECT f.is_enabled,f.access_mode,f.usage_limit,p.lifecycle_status FROM product_features f JOIN products p ON p.product_key=f.product_key WHERE f.product_key=? AND f.feature_key=?"
+  ).bind(productKey, featureKey).first();
+  if (!feature) return json({ allowed: false, reason: "feature_not_registered" }, 404);
+  if (feature.lifecycle_status === "retired" || feature.is_enabled !== 1 || feature.access_mode === "disabled") {
+    return json({ allowed: false, reason: "feature_disabled" }, 403);
+  }
+  if (feature.access_mode === "free") return json({ allowed: true, reason: "free_feature", product_key: productKey, feature_key: featureKey, usage_limit: feature.usage_limit });
+  const now = new Date().toISOString();
+  const grant = await env.CORE_DB.prepare(
+    "SELECT id,usage_limit,ends_at FROM account_feature_grants WHERE account_id=? AND product_key=? AND feature_key=? AND status='active' AND (starts_at IS NULL OR starts_at<=?) AND (ends_at IS NULL OR ends_at>?) ORDER BY created_at DESC LIMIT 1"
+  ).bind(account.account_id, productKey, featureKey, now, now).first();
+  if (!grant) return json({ allowed: false, reason: "purchase_or_subscription_required", product_key: productKey, feature_key: featureKey }, 403);
+  return json({ allowed: true, reason: "active_feature_grant", product_key: productKey, feature_key: featureKey, grant_id: grant.id, usage_limit: grant.usage_limit ?? feature.usage_limit, valid_until: grant.ends_at });
 }
 
 async function handle(request, env = {}) {
@@ -327,6 +417,14 @@ async function handle(request, env = {}) {
     response = await getProduct(env, productKey);
   } else if (request.method === "POST" && url.pathname === "/v1/auth/session") {
     response = await authenticate(request, env);
+  } else if (request.method === "GET" && /^\/v1\/admin\/products\/[a-z0-9-]+\/features$/.test(url.pathname)) {
+    response = await adminFeatureList(request, env, url.pathname.split("/")[4]);
+  } else if (request.method === "POST" && /^\/v1\/admin\/products\/[a-z0-9-]+\/features\/[a-z0-9][a-z0-9._-]{1,80}$/.test(url.pathname)) {
+    const parts = url.pathname.split("/");
+    response = await adminUpsertFeature(request, env, parts[4], parts[6]);
+  } else if (request.method === "GET" && /^\/v1\/access\/[a-z0-9-]+\/[a-z0-9][a-z0-9._-]{1,80}$/.test(url.pathname)) {
+    const parts = url.pathname.split("/");
+    response = await checkFeatureAccess(request, env, parts[3], parts[4]);
   } else if (request.method === "GET" && url.pathname === "/v1/me") {
     response = await currentUser(request, env);
   } else if (url.pathname === "/v1/auth/session") {
