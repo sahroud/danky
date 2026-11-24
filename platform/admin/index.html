@@ -44,7 +44,7 @@ const entries = [
  {name:"SAHROUD STEEL",url:"https://sahroud.github.io/steel/steel2/",icon:"🏗️"},
  {name:"SAHROUD METREH",url:"https://sahroud.github.io/SAHROUD-METREH/",icon:"📐"},
  {name:"SAHROUD UTM",url:"https://sahroud.github.io/utm/",icon:"🧭"},
- {name:"SAHROUD GPS",url:"https://sahroud.github.io/utm/",icon:"📍"},
+ {name:"SAHROUD GPS",url:"https://sahroud.github.io/A/",icon:"📍"},
  {name:"SAHROUD RTK",url:"https://sahroud.github.io/utm/gps-rtk/",icon:"📡"},
  {name:"SAHROUD EARTH",url:"https://sahroud.github.io/utm/earth/",icon:"🌍"},
  {name:"SAHROUD TOPOGRAPHY",url:"https://sahroud.github.io/utm/topography/",icon:"⛰️"},
@@ -64,7 +64,7 @@ entries.forEach((entry,index)=>{
  const symbol=document.createElement("div");symbol.className="symbol";symbol.setAttribute("aria-hidden","true");symbol.textContent=entry.icon;
  const hint=document.createElement("div");hint.className="hint";hint.textContent=entry.name;
  top.append(symbol,hint);
- const open=document.createElement("button");open.className="open";open.textContent="ورود";open.type="button";open.addEventListener("click",()=>window.open(entry.url,"_blank","noopener"));
+ const open=document.createElement("button");open.className="open";open.textContent="ورود";open.type="button";open.addEventListener("click",()=>{const launch=new URL("launch.html",location.href);launch.searchParams.set("url",entry.url);location.href=launch.href;});
  const share=document.createElement("button");share.className="share";share.textContent="ارسال";share.type="button";
  share.addEventListener("click",async()=>{
    try{
