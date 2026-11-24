@@ -223,10 +223,13 @@ async function resolveCentralIdentity(env, identity) {
   if (!env?.CORE_DB) throw Object.assign(new Error("core_database_not_configured"), { status: 503 });
 
   const existing = await env.CORE_DB.prepare(
-    "SELECT ai.principal_id, am.account_id FROM account_identities ai JOIN account_memberships am ON am.principal_id = ai.principal_id AND am.status = 'active' WHERE ai.provider = 'firebase' AND ai.provider_subject = ? ORDER BY am.created_at LIMIT 1"
-  ).bind(identity.subject).first();
+    "SELECT ai.principal_id, am.account_id FROM account_identities ai JOIN account_memberships am ON am.principal_id = ai.principal_id AND am.status = 'active' WHERE ai.provider = 'firebase' AND ai.provider_subject = ? ORDER BY am.created_at"
+  ).bind(identity.subject).all();
 
-  if (existing) return { principalId: existing.principal_id, accountId: existing.account_id };
+  if (existing.results?.length) {
+    const accounts = existing.results.map(row => row.account_id);
+    return { principalId: existing.results[0].principal_id, accountId: accounts.length === 1 ? accounts[0] : null, accountIds: accounts };
+  }
 
   const principalId = crypto.randomUUID();
   const accountId = crypto.randomUUID();
@@ -249,11 +252,12 @@ async function resolveCentralIdentity(env, identity) {
   ]);
 
   const resolved = await env.CORE_DB.prepare(
-    "SELECT ai.principal_id, am.account_id FROM account_identities ai JOIN account_memberships am ON am.principal_id = ai.principal_id AND am.status = 'active' WHERE ai.provider = 'firebase' AND ai.provider_subject = ? ORDER BY am.created_at LIMIT 1"
-  ).bind(identity.subject).first();
+    "SELECT ai.principal_id, am.account_id FROM account_identities ai JOIN account_memberships am ON am.principal_id = ai.principal_id AND am.status = 'active' WHERE ai.provider = 'firebase' AND ai.provider_subject = ? ORDER BY am.created_at"
+  ).bind(identity.subject).all();
 
-  if (!resolved) throw Object.assign(new Error("account_provisioning_failed"), { status: 503 });
-  return { principalId: resolved.principal_id, accountId: resolved.account_id };
+  if (!resolved.results?.length) throw Object.assign(new Error("account_provisioning_failed"), { status: 503 });
+  const accountIds = resolved.results.map(row => row.account_id);
+  return { principalId: resolved.results[0].principal_id, accountId: accountIds.length === 1 ? accountIds[0] : null, accountIds };
 }
 
 async function authenticate(request, env) {
@@ -264,6 +268,8 @@ async function authenticate(request, env) {
     authenticated: true,
     principal_id: central.principalId,
     account_id: central.accountId,
+    account_ids: central.accountIds || (central.accountId ? [central.accountId] : []),
+    account_selection_required: Boolean(central.accountIds?.length > 1),
     sign_in_provider: identity.provider,
     api_version: API_VERSION
   });
@@ -274,19 +280,29 @@ async function currentUser(request, env) {
   const identity = await verifyFirebaseIdToken(token, env);
   if (!env?.CORE_DB) return json({ error: "core_database_not_configured" }, 503);
 
-  const row = await env.CORE_DB.prepare(
-    "SELECT p.id AS principal_id, p.status AS principal_status, a.id AS account_id, a.display_name AS account_name, am.role AS account_role FROM account_identities ai JOIN principals p ON p.id = ai.principal_id JOIN account_memberships am ON am.principal_id = p.id AND am.status = 'active' JOIN accounts a ON a.id = am.account_id AND a.status = 'active' WHERE ai.provider = 'firebase' AND ai.provider_subject = ? AND p.status = 'active' ORDER BY am.created_at LIMIT 1"
-  ).bind(identity.subject).first();
+  const result = await env.CORE_DB.prepare(
+    "SELECT p.id AS principal_id, p.status AS principal_status, a.id AS account_id, a.display_name AS account_name, am.role AS account_role FROM account_identities ai JOIN principals p ON p.id = ai.principal_id JOIN account_memberships am ON am.principal_id = p.id AND am.status = 'active' JOIN accounts a ON a.id = am.account_id AND a.status = 'active' WHERE ai.provider = 'firebase' AND ai.provider_subject = ? AND p.status = 'active' ORDER BY am.created_at"
+  ).bind(identity.subject).all();
 
-  if (!row) return json({ error: "central_identity_not_found" }, 404);
+  const accounts = (result.results || []).map(row => ({
+    account_id: row.account_id,
+    account_name: row.account_name,
+    account_role: row.account_role
+  }));
+  if (!accounts.length) return json({ error: "central_identity_not_found" }, 404);
+  const principalId = result.results[0].principal_id;
+  const principalStatus = result.results[0].principal_status;
+  const singleAccount = accounts.length === 1 ? accounts[0] : null;
   return json({
     user: {
-      principal_id: row.principal_id,
+      principal_id: principalId,
       firebase_uid: identity.subject,
-      status: row.principal_status,
-      account_id: row.account_id,
-      account_name: row.account_name,
-      account_role: row.account_role,
+      status: principalStatus,
+      account_id: singleAccount?.account_id ?? null,
+      account_name: singleAccount?.account_name ?? null,
+      account_role: singleAccount?.account_role ?? null,
+      accounts,
+      account_selection_required: accounts.length > 1,
       sign_in_provider: identity.provider
     },
     api_version: API_VERSION
