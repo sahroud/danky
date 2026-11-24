@@ -189,22 +189,24 @@ test("usage limit blocks access when lifetime usage is exhausted", async () => {
 });
 
 test("multiple active accounts require an explicit account selection", async () => {
-  const access = await resolveFeatureAccess(entitlementRequest(), {
-    CORE_DB: entitlementDatabase({
-      accounts: [
-        { principal_id: "principal-1", principal_status: "active", account_id: "account-a", account_status: "active" },
-        { principal_id: "principal-1", principal_status: "active", account_id: "account-b", account_status: "active" }
-      ]
-    })
-  }, testIdentity, "steel", "dxf-export");
-  assert.equal(access.response.status, 409);
-  assert.equal((await access.response.json()).error, "account_selection_required");
+  await assert.rejects(
+    resolveFeatureAccess(entitlementRequest(), {
+      CORE_DB: entitlementDatabase({
+        accounts: [
+          { principal_id: "principal-1", principal_status: "active", account_id: "account-a", account_status: "active" },
+          { principal_id: "principal-1", principal_status: "active", account_id: "account-b", account_status: "active" }
+        ]
+      })
+    }, testIdentity, "steel", "dxf-export"),
+    error => error.message === "account_selection_required" && error.status === 409
+  );
 });
 
 test("selected account must belong to the authenticated identity", async () => {
-  const access = await resolveFeatureAccess(entitlementRequest("account-other"), {
-    CORE_DB: entitlementDatabase()
-  }, testIdentity, "steel", "dxf-export");
-  assert.equal(access.response.status, 403);
-  assert.equal((await access.response.json()).error, "account_membership_required");
+  await assert.rejects(
+    resolveFeatureAccess(entitlementRequest("account-other"), {
+      CORE_DB: entitlementDatabase()
+    }, testIdentity, "steel", "dxf-export"),
+    error => error.message === "account_membership_required" && error.status === 403
+  );
 });
