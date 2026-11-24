@@ -65,6 +65,7 @@ test("identity resolution does not choose an arbitrary account when multiple mem
   const db = {
     prepare(sql) {
       assert.match(sql, /FROM account_identities/);
+      assert.match(sql, /JOIN accounts a ON a.id = am.account_id AND a.status = 'active'/);
       return {
         bind(subject) {
           assert.equal(subject, "firebase-user-1");
