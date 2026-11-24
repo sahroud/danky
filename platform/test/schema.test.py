@@ -156,3 +156,56 @@ mapped_features = connection.execute(
 assert mapped_features == 1, "Active product plans must map to included features"
 
 print("SAHROUD Central schema tests passed")
+
+
+# Exercise the exact conditional UPSERT against SQLite using independent connections.
+# This is a database-engine concurrency test, not a Cloudflare D1 runtime test.
+from concurrent.futures import ThreadPoolExecutor
+import tempfile
+
+usage_upsert = """
+INSERT INTO feature_usage
+  (account_id, product_key, feature_key, used_count, created_at, updated_at)
+SELECT ?, ?, ?, 1, ?, ?
+WHERE (? IS NULL OR ? > 0)
+ON CONFLICT(account_id, product_key, feature_key)
+DO UPDATE SET
+  used_count = feature_usage.used_count + 1,
+  updated_at = excluded.updated_at
+WHERE (? IS NULL OR feature_usage.used_count < ?)
+RETURNING used_count
+"""
+
+with tempfile.TemporaryDirectory() as temp_dir:
+    db_path = Path(temp_dir) / "central-concurrency.sqlite"
+    with sqlite3.connect(db_path) as seed:
+        connection.backup(seed)
+
+    def attempt_consume(_):
+        with sqlite3.connect(db_path, timeout=15, isolation_level=None) as db:
+            db.execute("PRAGMA busy_timeout = 15000")
+            return db.execute(
+                usage_upsert,
+                ("a1", "steel", "dxf-export", "2026-11-24T00:00:00Z",
+                 "2026-11-24T00:00:00Z", 5, 5, 5, 5),
+            ).fetchone()
+
+    with ThreadPoolExecutor(max_workers=40) as pool:
+        outcomes = list(pool.map(attempt_consume, range(40)))
+
+    accepted = [row[0] for row in outcomes if row is not None]
+    rejected = sum(row is None for row in outcomes)
+    with sqlite3.connect(db_path) as verify:
+        final_count = verify.execute(
+            "SELECT used_count FROM feature_usage "
+            "WHERE account_id='a1' AND product_key='steel' AND feature_key='dxf-export'"
+        ).fetchone()[0]
+
+    assert len(accepted) == 3, (
+        f"Expected exactly 3 accepted requests from initial count 2 to limit 5; got {len(accepted)}"
+    )
+    assert rejected == 37, f"Expected 37 rejected requests, got {rejected}"
+    assert final_count == 5, f"Usage counter exceeded or missed limit: {final_count}"
+    assert sorted(accepted) == [3, 4, 5], f"Unexpected returned counts: {accepted}"
+
+print("SAHROUD Central SQLite concurrent usage test passed")
