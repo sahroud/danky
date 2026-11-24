@@ -25,6 +25,7 @@ footer{text-align:center;color:#88a7b8;font-size:11px;line-height:1.9;padding:22
 #toast.show{opacity:1;transform:translate(-50%,0)}
 @media(max-width:380px){main{padding-inline:12px}.grid{gap:9px}.item{padding:11px}.open{padding:11px}}
 @media(min-width:620px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+ #updates{display:none;margin:0 0 14px;padding:13px 15px;border:1px solid #397b78;border-radius:14px;background:#103c42;color:#d9fff5;font-size:12px;line-height:1.9}#updates.show{display:block}.release{display:block;color:#9ce6d8;font-size:10px;margin-top:5px}
 </style>
 </head>
 <body>
@@ -34,37 +35,43 @@ footer{text-align:center;color:#88a7b8;font-size:11px;line-height:1.9;padding:22
 <h1>درگاه یکپارچه</h1>
 <p>برای ورود، دکمهٔ سبز را بزنید. برای فرستادن نشانی، دکمهٔ ارسال را انتخاب کنید تا برنامه‌های اشتراک‌گذاری گوشی نمایش داده شوند.</p>
 </header>
+<aside id="updates" role="status" aria-live="polite"></aside>
 <section class="grid" id="apps" aria-label="دسترسی‌ها"></section>
 <footer>برای بهترین تجربه، این صفحه را در مرورگر گوشی باز کنید.<br>در صورت پشتیبانی گوشی، از منوی مرورگر گزینهٔ «افزودن به صفحهٔ اصلی» را بزنید.</footer>
 </main>
 <div id="toast" role="status" aria-live="polite"></div>
 <script>
 const entries = [
- {name:"SAHROUD FAMILY GUARD",url:"https://sahroud.github.io/danky/family-guard/",icon:"🛡️"},
- {name:"SAHROUD STEEL",url:"https://sahroud.github.io/steel/steel2/",icon:"🏗️"},
- {name:"SAHROUD METREH",url:"https://sahroud.github.io/SAHROUD-METREH/",icon:"📐"},
- {name:"SAHROUD UTM",url:"https://sahroud.github.io/utm/",icon:"🧭"},
- {name:"SAHROUD GPS",url:"https://sahroud.github.io/A/",icon:"📍"},
- {name:"SAHROUD RTK",url:"https://sahroud.github.io/110/",icon:"📡"},
- {name:"SAHROUD EARTH",url:"https://sahroud.github.io/utm/earth/",icon:"🌍"},
- {name:"SAHROUD TOPOGRAPHY",url:"https://sahroud.github.io/utm/topography/",icon:"⛰️"},
- {name:"SAHROUD TASBIH",url:"https://sahroud.github.io/A/tasbih/",icon:"📿"},
- {name:"SAHROUD RAKAT",url:"https://sahroud.github.io/A/rakat/",icon:"🕌"},
- {name:"SAHROUD COUNTER",url:"https://sahroud.github.io/A/counter/",icon:"🔢"},
- {name:"SAHROUD GAMES",url:"https://sahroud.github.io/A/games/",icon:"🎮"},
- {name:"SAHROUD WINDOWS DOCTOR",url:"https://sahroud.github.io/A/windows-doctor/",icon:"🩺"}
+ {id:"family-guard",name:"SAHROUD FAMILY GUARD",url:"https://sahroud.github.io/danky/family-guard/",icon:"🛡️"},
+ {id:"steel",name:"SAHROUD STEEL",url:"https://sahroud.github.io/steel/steel2/",icon:"🏗️"},
+ {id:"metreh",name:"SAHROUD METREH",url:"https://sahroud.github.io/SAHROUD-METREH/",icon:"📐"},
+ {id:"utm",name:"SAHROUD UTM",url:"https://sahroud.github.io/utm/",icon:"🧭"},
+ {id:"gps",name:"SAHROUD GPS",url:"https://sahroud.github.io/A/",icon:"📍"},
+ {id:"rtk",name:"SAHROUD RTK",url:"https://sahroud.github.io/utm/gps-rtk/",icon:"📡"},
+ {id:"earth",name:"SAHROUD EARTH",url:"https://sahroud.github.io/utm/earth/",icon:"🌍"},
+ {id:"topography",name:"SAHROUD TOPOGRAPHY",url:"https://sahroud.github.io/utm/topography/",icon:"⛰️"},
+ {id:"tasbih",name:"SAHROUD TASBIH",url:"https://sahroud.github.io/A/tasbih/",icon:"📿"},
+ {id:"rakat",name:"SAHROUD RAKAT",url:"https://sahroud.github.io/A/rakat/",icon:"🕌"},
+ {id:"counter",name:"SAHROUD COUNTER",url:"https://sahroud.github.io/A/counter/",icon:"🔢"},
+ {id:"games",name:"SAHROUD GAMES",url:"https://sahroud.github.io/A/games/",icon:"🎮"},
+ {id:"windows-doctor",name:"SAHROUD WINDOWS DOCTOR",url:"https://sahroud.github.io/A/windows-doctor/",icon:"🩺"},
+ {id:"camera",name:"SAHROUD CAMERA",url:"https://sahroud.github.io/danky/camera/",icon:"📸"}
 ];
 const root=document.getElementById("apps");
 const toast=document.getElementById("toast");
+const updatesPanel=document.getElementById("updates");
+const knownVersionsKey="sahroud_portal_seen_versions_v1";
 let toastTimer;
 function notify(message){toast.textContent=message;toast.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove("show"),2400)}
 entries.forEach((entry,index)=>{
- const card=document.createElement("article");card.className="item";
+ const card=document.createElement("article");card.className="item";card.dataset.appId=entry.id;
  const top=document.createElement("div");top.className="top";
  const symbol=document.createElement("div");symbol.className="symbol";symbol.setAttribute("aria-hidden","true");symbol.textContent=entry.icon;
+ const titleBox=document.createElement("div");titleBox.style.minWidth="0";
  const hint=document.createElement("div");hint.className="hint";hint.textContent=entry.name;
- top.append(symbol,hint);
- const open=document.createElement("button");open.className="open";open.textContent="ورود";open.type="button";open.addEventListener("click",()=>{const launch=new URL("launch.html",location.href);launch.searchParams.set("url",entry.url);location.href=launch.href;});
+ const release=document.createElement("small");release.className="release";release.textContent="آخرین نسخه آنلاین";titleBox.append(hint,release);
+ top.append(symbol,titleBox);
+ const open=document.createElement("button");open.className="open";open.textContent="ورود";open.type="button";open.addEventListener("click",()=>{const launch=new URL("launch.html",location.href);launch.searchParams.set("url",entry.url);launch.searchParams.set("id",entry.id);location.href=launch.href;});
  const share=document.createElement("button");share.className="share";share.textContent="ارسال";share.type="button";
  share.addEventListener("click",async()=>{
    try{
@@ -75,6 +82,41 @@ entries.forEach((entry,index)=>{
  });
  card.append(top,open,share);root.appendChild(card);
 });
+
+async function refreshAppUpdates(){
+ try{
+  const response=await fetch(new URL("updates.json?check="+Date.now(),location.href),{cache:"no-store",headers:{"Accept":"application/json"}});
+  if(!response.ok)throw new Error("updates unavailable");
+  const manifest=await response.json();
+  const versions=manifest.apps||{};
+  let seen={};try{seen=JSON.parse(localStorage.getItem(knownVersionsKey)||"{}")||{};}catch{}
+  const changes=[];
+  entries.forEach(entry=>{
+   const release=versions[entry.id];
+   const label=release&&release.version?("نسخه "+release.version):"آخرین نسخه آنلاین";
+   const card=root.querySelector('[data-app-id="'+entry.id+'"]');
+   if(card){const tag=card.querySelector(".release");if(tag)tag.textContent=label;}
+   if(release&&release.version){
+    if(seen[entry.id] && seen[entry.id]!==release.version) changes.push({entry,release});
+    seen[entry.id]=release.version;
+   }
+  });
+  try{localStorage.setItem(knownVersionsKey,JSON.stringify(seen));}catch{}
+  if(changes.length){
+   const c=changes[changes.length-1];
+   updatesPanel.textContent="به‌روزرسانی جدید: "+c.entry.name+" — نسخه "+c.release.version+"؛ "+(c.release.notes||"نسخه جدید منتشر شد.");
+   updatesPanel.classList.add("show");
+  }else if(!sessionStorage.getItem("sahroud_updates_intro")){
+   updatesPanel.textContent="بررسی نسخه‌ها فعال است؛ با انتشار نسخه جدید، پیام تغییر همین‌جا نمایش داده می‌شود.";
+   updatesPanel.classList.add("show");sessionStorage.setItem("sahroud_updates_intro","1");
+  }
+ }catch(error){
+  updatesPanel.textContent="بررسی پیام‌های تغییر موقتاً در دسترس نیست؛ ورود به نرم‌افزارها همچنان برقرار است.";
+  updatesPanel.classList.add("show");
+ }
+}
+refreshAppUpdates();
+setInterval(refreshAppUpdates,120000);
 </script>
 </body>
 </html>
