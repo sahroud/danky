@@ -11,10 +11,13 @@
     "db:migrate:remote": "wrangler d1 migrations apply sahroud-central --remote",
     "db:migrations:remote": "wrangler d1 migrations list sahroud-central --remote",
     "test:schema": "python test/schema.test.py",
-    "test:all": "npm test && npm run test:schema"
+    "test:all": "npm test && npm run test:schema && npm run test:d1",
+    "test:d1": "vitest run --config vitest.config.js"
   },
   "devDependencies": {
-    "wrangler": "^4.36.0"
+    "wrangler": "^4.36.0",
+    "@cloudflare/vitest-plugin": "^1.2.2",
+    "vitest": "^4.1.0"
   },
   "engines": {
     "node": ">=20"
