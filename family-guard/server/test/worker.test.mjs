@@ -16,6 +16,7 @@ class FakeD1 {
     this.families = new Map();
     this.members = new Map();
     this.invites = new Map();
+    this.parentInvites = new Map();
     this.devices = new Map();
     this.locations = [];
   }
@@ -38,6 +39,7 @@ class FakeD1 {
           return row ? { id: row.id } : null;
         }
         if (sql.includes("FROM invites WHERE code_hash")) return db.invites.get(args[0]) || null;
+        if (sql.includes("FROM parent_invites WHERE code_hash")) return db.parentInvites.get(args[0]) || null;
         if (sql.includes("FROM devices WHERE device_token_hash")) {
           const row = [...db.devices.values()].find(x => x.device_token_hash === args[0]);
           return row ? { id: row.id, family_id: row.family_id, label: row.label, sharing_enabled: row.sharing_enabled } : null;
@@ -77,7 +79,9 @@ class FakeD1 {
         }
         if (sql.includes("INSERT INTO family_members")) {
           const [id,family_id,label,token_hash,created_at] = args;
-          db.members.set(id,{id,family_id,role:"owner",label,token_hash,status:"active",subscription_status:"included",created_at});
+          const isSecondParent = sql.includes("'second_parent'");
+          db.members.set(id,{id,family_id,role:isSecondParent?"second_parent":"owner",label,token_hash,
+            status:"active",subscription_status:isSecondParent?"inactive":"included",created_at});
           return { meta: { changes: 1 } };
         }
         if (sql.includes("INSERT INTO invites")) {
@@ -85,14 +89,20 @@ class FakeD1 {
           db.invites.set(code_hash,{code_hash,family_id,expires_at,used_at:null,created_at});
           return { meta: { changes: 1 } };
         }
-        if (sql.includes("UPDATE invites SET used_at")) {
+        if (sql.includes("UPDATE invites SET used_at") || sql.includes("UPDATE parent_invites SET used_at")) {
+          const store = sql.includes("parent_invites") ? db.parentInvites : db.invites;
           const [used_at,code_hash,now] = args;
-          const invite = db.invites.get(code_hash);
+          const invite = store.get(code_hash);
           if (invite && !invite.used_at && invite.expires_at > now) {
             invite.used_at = used_at;
             return { meta: { changes: 1 } };
           }
           return { meta: { changes: 0 } };
+        }
+        if (sql.includes("INSERT INTO parent_invites")) {
+          const [code_hash,family_id,expires_at,created_at] = args;
+          db.parentInvites.set(code_hash,{code_hash,family_id,expires_at,used_at:null,created_at});
+          return { meta: { changes: 1 } };
         }
         if (sql.includes("INSERT INTO devices")) {
           const [id,family_id,label,device_token_hash,consented_at,sharing_enabled,created_at] = args;
@@ -221,17 +231,48 @@ test("family owner can invite, pair with consent, receive location, inspect hist
   assert.equal(blockedUpload.status, 403);
 });
 
-test("location endpoint rejects unauthenticated and malformed coordinates", async () => {
+test("location endpoint rejects unauthenticated uploads", async () => {
   const DB = new FakeD1();
   const env = { DB };
   const unauthorized = await handle(request("/v1/location", {
     method:"POST", body:{latitude:35,longitude:54}
   }), env);
   assert.equal(unauthorized.status, 401);
-  const invalid = await handle(request("/v1/location", {
-    method:"POST", body:{latitude:91,longitude:54}
+});
+
+test("second parent requires consent and a separate active subscription", async () => {
+  const DB = new FakeD1();
+  const env = { DB };
+  const created = await (await handle(request("/v1/families", {
+    method:"POST", body:{parent_label:"Owner"}
+  }), env)).json();
+
+  const inviteResponse = await handle(request("/v1/parents/invite", {
+    method:"POST", body:{}, token:created.parent_token
   }), env);
-  assert.equal(invalid.status, 401);
+  assert.equal(inviteResponse.status, 201);
+  const invite = await inviteResponse.json();
+  assert.equal(invite.invite_code.length, 16);
+
+  const denied = await handle(request("/v1/parents/accept", {
+    method:"POST", body:{parent_label:"Second",invite_code:invite.invite_code,consent:false}
+  }), env);
+  assert.equal(denied.status, 400);
+
+  const accepted = await handle(request("/v1/parents/accept", {
+    method:"POST", body:{parent_label:"Second",invite_code:invite.invite_code,consent:true}
+  }), env);
+  assert.equal(accepted.status, 201);
+  const second = await accepted.json();
+  assert.equal(second.subscription_status, "inactive");
+
+  const blocked = await handle(request("/v1/family/devices", { token:second.parent_token }), env);
+  assert.equal(blocked.status, 402);
+
+  const cannotInvite = await handle(request("/v1/invites", {
+    method:"POST", body:{}, token:second.parent_token
+  }), env);
+  assert.equal(cannotInvite.status, 403);
 });
 
 test("family data requires a valid parent token", async () => {
