@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - feat/sahroud-central-foundation
+      - feat/sahroud-subscription-usage-enforcement
     paths:
       - "platform/**"
       - ".github/workflows/sahroud-central-ci.yml"
