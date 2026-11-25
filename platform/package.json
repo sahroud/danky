@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/client.test.js test/firebase-auth.test.js test/index.test.js test/worker.test.js test/admission-state.test.js test/operation-coordinator.test.js",
+    "test": "node --test test/client.test.js test/firebase-auth.test.js test/index.test.js test/worker.test.js test/admission-state.test.js test/operation-coordinator.test.js test/operation-coordinator-do.test.js",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply sahroud-central --local",
@@ -25,4 +25,4 @@
   "dependencies": {
     "jose": "^6.1.0"
   }
-}
+}\n
