@@ -17,12 +17,13 @@ function purge(state, now) {
 }
 
 function validatePolicy(input) {
-  const { cap, accountCap = cap, leaseSeconds, maxLifetimeSeconds, queueLimit = 0, maxWaitSeconds = 0 } = input;
+  const { cap, accountCap = cap, leaseSeconds, maxLifetimeSeconds, queueLimit = 0, accountQueueLimit = queueLimit, maxWaitSeconds = 0 } = input;
   return Number.isSafeInteger(cap) && cap >= 1 &&
     Number.isSafeInteger(accountCap) && accountCap >= 1 &&
     Number.isSafeInteger(leaseSeconds) && leaseSeconds >= 1 &&
     Number.isSafeInteger(maxLifetimeSeconds) && maxLifetimeSeconds >= leaseSeconds &&
     Number.isSafeInteger(queueLimit) && queueLimit >= 0 &&
+    Number.isSafeInteger(accountQueueLimit) && accountQueueLimit >= 0 &&
     Number.isSafeInteger(maxWaitSeconds) && maxWaitSeconds >= 0;
 }
 
@@ -51,7 +52,7 @@ function promote(state, now, cap, accountCap, leaseSeconds, maxLifetimeSeconds) 
     state.leases[entry.leaseId] = {
       leaseId: entry.leaseId, requestId: entry.requestId, requestKey,
       accountId: entry.accountId, productKey: entry.productKey,
-      createdAt: now, expiresAt: Math.min(now + leaseSeconds, entry.maxExpiresAt),
+      createdAt: now, expiresAt: Math.min(now + (entry.leaseSeconds ?? leaseSeconds), entry.maxExpiresAt),
       maxExpiresAt: entry.maxExpiresAt
     };
   }
@@ -59,7 +60,7 @@ function promote(state, now, cap, accountCap, leaseSeconds, maxLifetimeSeconds) 
 
 export function acquire(state, input) {
   const { now, accountId, productKey, requestId, leaseId,
-    cap, accountCap = cap, leaseSeconds, maxLifetimeSeconds, queueLimit = 0, maxWaitSeconds = 0 } = input;
+    cap, accountCap = cap, leaseSeconds, maxLifetimeSeconds, queueLimit = 0, accountQueueLimit = queueLimit, maxWaitSeconds = 0 } = input;
   if (!Number.isSafeInteger(now) || typeof accountId !== "string" || !accountId ||
       typeof productKey !== "string" || !productKey ||
       typeof requestId !== "string" || !requestId ||
@@ -83,11 +84,12 @@ export function acquire(state, input) {
     state.leases[leaseId] = lease;
     return { status: "granted", lease: { ...lease }, idempotent: false };
   }
-  if (Object.keys(state.queue).length >= queueLimit || maxWaitSeconds <= 0) {
+  const accountQueued = Object.values(state.queue).filter(entry => entry.accountId === accountId).length;
+  if (Object.keys(state.queue).length >= queueLimit || accountQueued >= accountQueueLimit || maxWaitSeconds <= 0) {
     return { status: "denied", reason: "capacity_full" };
   }
   state.queue[requestKey] = {
-    requestId, requestKey, leaseId, accountId, productKey, accountCap, sequence: state.nextSequence++,
+    requestId, requestKey, leaseId, accountId, productKey, accountCap, accountQueueLimit, leaseSeconds, sequence: state.nextSequence++,
     expiresAt: now + maxWaitSeconds, maxExpiresAt: now + maxLifetimeSeconds
   };
   return { status: "queued", position: queuePosition(state, requestKey) };
