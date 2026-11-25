@@ -73,6 +73,28 @@ test("DO serializes concurrent acquisitions and enforces the cap", async () => {
   assert.equal(results.filter(result => result.status === "granted").length, 1);
   assert.equal(results.filter(result => result.status === "queued").length, 1);
 });
+
+test("DO rejects unbound operations and prevents cross-account lease mutation", async () => {
+  const storage = storageHarness();
+  const env = { OPERATION_ASSERTION_SECRET: secret };
+  const owner = new OperationCoordinatorDO({ storage }, env);
+  const other = new OperationCoordinatorDO({ storage }, env);
+  const missingBinding = await signCoordinatorAssertion({ ...policy, action: "acquire" }, secret);
+  assert.equal((await call(owner, missingBinding, "acquire", { requestId: "r1", leaseId: "l1" })).status, 401);
+
+  const acquired = await call(owner, await assertion("acquire", { requestId: "r1", leaseId: "l1" }), "acquire", {});
+  assert.equal((await acquired.json()).status, "granted");
+
+  const foreignScope = { ...policy, accountId: "account-2" };
+  const heartbeatToken = await signCoordinatorAssertion({ ...foreignScope, action: "heartbeat", leaseId: "l1" }, secret);
+  const releaseToken = await signCoordinatorAssertion({ ...foreignScope, action: "release", leaseId: "l1" }, secret);
+  assert.equal((await (await call(other, heartbeatToken, "heartbeat", { leaseId: "l1" })).json()).status, "not_found");
+  assert.deepEqual(await (await call(other, releaseToken, "release", { leaseId: "l1" })).json(), { status: "released", existed: false });
+
+  const ownerHeartbeat = await call(owner, await assertion("heartbeat", { leaseId: "l1" }), "heartbeat", { leaseId: "l1" });
+  assert.equal((await ownerHeartbeat.json()).status, "renewed");
+});
+
 test("DO persists leases across instances and supports heartbeat and release", async () => {
   const storage = storageHarness();
   const env = { OPERATION_ASSERTION_SECRET: secret };
