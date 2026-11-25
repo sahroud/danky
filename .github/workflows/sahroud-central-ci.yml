@@ -37,7 +37,7 @@ jobs:
       - name: Pin npm to a stable installer version
         run: npm install --global npm@10.9.3
       - name: Install platform dependencies
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm install --ignore-scripts --no-audit --no-fund --legacy-peer-deps
       - name: Run API and authentication tests
         run: npm test
       - name: Set up Python
