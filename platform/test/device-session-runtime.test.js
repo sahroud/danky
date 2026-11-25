@@ -27,7 +27,7 @@ describe("D1 device and session lifecycle concurrency", () => {
       "CREATE TABLE products (product_key TEXT PRIMARY KEY, lifecycle_status TEXT NOT NULL)",
       "CREATE TABLE accounts (id TEXT PRIMARY KEY, status TEXT NOT NULL)",
       "CREATE TABLE principals (id TEXT PRIMARY KEY, status TEXT NOT NULL)",
-      "CREATE TABLE account_memberships (account_id TEXT NOT NULL, principal_id TEXT NOT NULL, status TEXT NOT NULL, PRIMARY KEY(account_id, principal_id))",
+      "CREATE TABLE account_memberships (account_id TEXT NOT NULL, principal_id TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(account_id, principal_id))",
       "CREATE TABLE account_identities (provider TEXT NOT NULL, provider_subject TEXT NOT NULL, principal_id TEXT NOT NULL)",
       "CREATE TABLE product_runtime_policies (product_key TEXT PRIMARY KEY, max_devices_per_account INTEGER, max_sessions_per_account INTEGER, session_lease_seconds INTEGER)",
       "CREATE TABLE account_product_policy_overrides (account_id TEXT NOT NULL, product_key TEXT NOT NULL, max_devices_per_account INTEGER, max_sessions_per_account INTEGER, PRIMARY KEY(account_id, product_key))",
@@ -36,7 +36,7 @@ describe("D1 device and session lifecycle concurrency", () => {
       "INSERT INTO products VALUES ('steel', 'development')",
       "INSERT INTO accounts VALUES ('device-session-account', 'active')",
       "INSERT INTO principals VALUES ('device-session-principal', 'active')",
-      "INSERT INTO account_memberships VALUES ('device-session-account', 'device-session-principal', 'active')",
+      "INSERT INTO account_memberships VALUES ('device-session-account', 'device-session-principal', 'active', '2026-11-25T00:00:00.000Z')",
       "INSERT INTO account_identities VALUES ('firebase', 'firebase-device-session-test', 'device-session-principal')",
       "INSERT INTO product_runtime_policies VALUES ('steel', 2, 3, 300)"
     ];
