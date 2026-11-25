@@ -585,11 +585,11 @@ async function handle(request, env = {}) {
     response = await authenticate(request, env);
   } else if (request.method === "GET" && url.pathname === "/v1/admin/accounts") {
     response = await adminAccountList(request, env);
-  } else if (request.method === "GET" && /^\\/v1\\/admin\\/accounts\\/[^/]+\\/grants$/.test(url.pathname)) {
+  } else if (request.method === "GET" && /^\/v1\/admin\/accounts\/[^/]+\/grants$/.test(url.pathname)) {
     response = await adminAccountGrants(request, env, decodeURIComponent(url.pathname.split("/")[4]));
-  } else if (request.method === "POST" && /^\\/v1\\/admin\\/accounts\\/[^/]+\\/grants$/.test(url.pathname)) {
+  } else if (request.method === "POST" && /^\/v1\/admin\/accounts\/[^/]+\/grants$/.test(url.pathname)) {
     response = await adminCreateGrant(request, env, decodeURIComponent(url.pathname.split("/")[4]));
-  } else if (request.method === "PATCH" && /^\\/v1\\/admin\\/grants\\/[^/]+$/.test(url.pathname)) {
+  } else if (request.method === "PATCH" && /^\/v1\/admin\/grants\/[^/]+$/.test(url.pathname)) {
     response = await adminUpdateGrant(request, env, decodeURIComponent(url.pathname.split("/")[4]));
   } else if (request.method === "GET" && /^\/v1\/admin\/products\/[a-z0-9-]+\/features$/.test(url.pathname)) {
     response = await adminFeatureList(request, env, url.pathname.split("/")[4]);
