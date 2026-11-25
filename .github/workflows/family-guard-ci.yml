@@ -33,4 +33,4 @@ jobs:
           python-version: "3.12"
       - name: Run SQLite schema and migration tests
         working-directory: family-guard/server
-        run: python -m unittest discover -s test -p "schema.test.py" -v
+        run: python -m unittest discover -s test -p "schema_test.py" -v
