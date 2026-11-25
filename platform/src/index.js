@@ -505,6 +505,48 @@ async function adminProductPlans(request, env, productKey) {
   return json({ product_key: productKey, plans: result.results || [] });
 }
 
+
+async function adminUpsertPlan(request, env, productKey) {
+  const identity = await verifyFirebaseIdToken(bearerToken(request), env);
+  if (!isCentralAdmin(identity, env)) return json({ error: "central_admin_required" }, 403);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "invalid_json" }, 400); }
+  const planCode = typeof body?.plan_code === "string" ? body.plan_code.trim() : "";
+  const displayName = typeof body?.display_name === "string" ? body.display_name.trim() : "";
+  const featureKeys = body?.feature_keys;
+  const isActive = body?.is_active === false ? 0 : 1;
+  if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(planCode) ||
+      !displayName || displayName.length > 120 ||
+      !Array.isArray(featureKeys) || featureKeys.length < 1 || featureKeys.length > 100 ||
+      featureKeys.some(key => typeof key !== "string" || !/^[a-z0-9][a-z0-9._-]{1,80}$/.test(key)) ||
+      new Set(featureKeys).size !== featureKeys.length) {
+    return json({ error: "invalid_plan_settings" }, 400);
+  }
+  const product = await env.CORE_DB.prepare("SELECT product_key,lifecycle_status FROM products WHERE product_key=?").bind(productKey).first();
+  if (!product || product.lifecycle_status === "retired") return json({ error: "active_product_not_found" }, 404);
+  const placeholders = featureKeys.map(() => "?").join(",");
+  const features = await env.CORE_DB.prepare(
+    "SELECT feature_key FROM product_features WHERE product_key=? AND is_enabled=1 AND access_mode='paid' AND feature_key IN (" + placeholders + ")"
+  ).bind(productKey, ...featureKeys).all();
+  const validKeys = new Set((features.results || []).map(row => row.feature_key));
+  if (validKeys.size !== featureKeys.length) return json({ error: "plan_contains_unknown_or_unavailable_features" }, 400);
+  const now = new Date().toISOString();
+  const statements = [
+    env.CORE_DB.prepare(
+      "INSERT INTO plans (product_key,plan_code,display_name,limits_json,is_active,created_at,updated_at) VALUES (?,?,?,'{}',?,?,?) ON CONFLICT(product_key,plan_code) DO UPDATE SET display_name=excluded.display_name,is_active=excluded.is_active,updated_at=excluded.updated_at"
+    ).bind(productKey, planCode, displayName, isActive, now, now),
+    env.CORE_DB.prepare("DELETE FROM plan_features WHERE product_key=? AND plan_code=?").bind(productKey, planCode),
+    ...featureKeys.map(key => env.CORE_DB.prepare(
+      "INSERT INTO plan_features (product_key,plan_code,feature_key,created_at) VALUES (?,?,?,?)"
+    ).bind(productKey, planCode, key, now)),
+    env.CORE_DB.prepare(
+      "INSERT INTO audit_events (id,product_key,event_type,target_type,target_id,outcome,created_at,metadata_json) VALUES (?,?,'plan_upserted','plan',?,'success',?,?)"
+    ).bind(crypto.randomUUID(), productKey, planCode, now, JSON.stringify({ display_name: displayName, is_active: !!isActive, feature_keys: featureKeys, actor_uid: identity.subject }))
+  ];
+  await env.CORE_DB.batch(statements);
+  return json({ saved: true, product_key: productKey, plan_code: planCode, display_name: displayName, is_active: !!isActive, feature_keys: featureKeys });
+}
+
 async function adminAccountSubscriptions(request, env, accountId) {
   const identity = await verifyFirebaseIdToken(bearerToken(request), env);
   if (!isCentralAdmin(identity, env)) return json({ error: "central_admin_required" }, 403);
@@ -667,6 +709,8 @@ async function handle(request, env = {}) {
     response = await getProduct(env, productKey);
   } else if (request.method === "POST" && url.pathname === "/v1/auth/session") {
     response = await authenticate(request, env);
+  } else if (request.method === "POST" && /^\/v1\/admin\/products\/[a-z0-9-]+\/plans$/.test(url.pathname)) {
+    response = await adminUpsertPlan(request, env, url.pathname.split("/")[4]);
   } else if (request.method === "GET" && /^\/v1\/admin\/products\/[a-z0-9-]+\/plans$/.test(url.pathname)) {
     response = await adminProductPlans(request, env, url.pathname.split("/")[4]);
   } else if (request.method === "GET" && /^\/v1\/admin\/accounts\/[^/]+\/subscriptions$/.test(url.pathname)) {
