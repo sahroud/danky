@@ -16,10 +16,9 @@ RETURNING used_count
 
 describe("Cloudflare D1 usage enforcement", () => {
   beforeAll(async () => {
-    // Vitest's Cloudflare plugin supplies a local Miniflare D1 binding from wrangler.toml.
-    // This isolated test table intentionally avoids touching any remote database or Family Guard.
+    // This test uses only the local Miniflare D1 binding; it never touches remote D1 or Family Guard.
     await env.CORE_DB.exec("DROP TABLE IF EXISTS feature_usage");
-    await env.CORE_DB.exec(`
+    await env.CORE_DB.prepare(`
       CREATE TABLE feature_usage (
         account_id TEXT NOT NULL,
         product_key TEXT NOT NULL,
@@ -29,7 +28,7 @@ describe("Cloudflare D1 usage enforcement", () => {
         updated_at TEXT NOT NULL,
         PRIMARY KEY (account_id, product_key, feature_key)
       )
-    `);
+    `).run();
     await env.CORE_DB.prepare(`
       INSERT INTO feature_usage
         (account_id, product_key, feature_key, used_count, created_at, updated_at)
