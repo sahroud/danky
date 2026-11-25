@@ -376,6 +376,10 @@ test("admin account and grant management routes require Firebase authentication"
     ["/v1/admin/accounts", "GET"],
     ["/v1/admin/accounts/account-a/grants", "GET"],
     ["/v1/admin/accounts/account-a/grants", "POST"],
+    ["/v1/admin/products/steel/plans", "GET"],
+    ["/v1/admin/accounts/account-a/subscriptions", "GET"],
+    ["/v1/admin/accounts/account-a/subscriptions", "POST"],
+    ["/v1/admin/subscriptions/sub-1", "PATCH"],
     ["/v1/admin/grants/grant-1", "PATCH"]
   ];
   for (const [path, method] of cases) {
