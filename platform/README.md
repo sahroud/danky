@@ -104,3 +104,19 @@ APIهای کنترل دسترسی و سهمیه در شاخه توسعه پیا�
 ## Cloudflare Workers Builds
 
 اتصال مخزن GitHub برای استقرار Worker مرکزی از شاخه `feat/sahroud-central-foundation` انجام می‌شود. تغییرات این مستند نیز می‌تواند Build اولیه را فعال کند؛ پیش از اعلام موفقیت، وضعیت Build و Deploy در داشبورد Cloudflare بررسی شود.
+
+
+## Device and session lifecycle (local implementation)
+
+The Worker exposes authenticated device/session lifecycle routes:
+
+- `GET /v1/devices/{productKey}`
+- `POST /v1/devices/{productKey}/register`
+- `POST /v1/devices/{productKey}/revoke`
+- `POST /v1/sessions/{productKey}/open`
+- `POST /v1/sessions/{productKey}/heartbeat`
+- `POST /v1/sessions/{productKey}/close`
+
+Firebase authentication and active account membership are required. Device registration and session opening use separate effective account caps; account overrides can only tighten product caps. A session receives a random opaque token once; only its SHA-256 hash is persisted. Heartbeat extends the session lease, and device revocation also revokes that device's active sessions.
+
+A device ID identifies an app installation, not guaranteed physical hardware. Product device/session caps must be configured; missing caps fail closed. These routes are implemented in the branch but have not been deployed. Product adapters still need to call the lifecycle APIs.
