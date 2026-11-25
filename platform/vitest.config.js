@@ -11,7 +11,7 @@ export default defineConfig({
     })
   ],
   test: {
-    include: ["test/d1-usage.test.js"],
+    include: ["test/d1-usage.test.js", "test/operation-coordinator-runtime.test.js"],
     testTimeout: 30000,
     hookTimeout: 30000,
     fileParallelism: false
