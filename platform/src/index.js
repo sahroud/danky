@@ -399,9 +399,9 @@ async function adminAccountList(request, env) {
   if (!isCentralAdmin(identity, env)) return json({ error: "central_admin_required" }, 403);
   const query = new URL(request.url).searchParams.get("q")?.trim() || "";
   if (query.length > 120) return json({ error: "invalid_search_query" }, 400);
-  const pattern = "%" + query.replace(/[\\%_]/g, "\\async function resolveFeatureAccess(request, env, identity, productKey, featureKey) {") + "%";
+  const pattern = "%" + query + "%";
   const result = await env.CORE_DB.prepare(
-    "SELECT id,display_name,account_type,status FROM accounts WHERE status='active' AND (?='' OR id LIKE ? ESCAPE '\\\\' OR display_name LIKE ? ESCAPE '\\\\') ORDER BY display_name LIMIT 50"
+    "SELECT id,display_name,account_type,status FROM accounts WHERE status='active' AND (?='' OR id LIKE ? OR display_name LIKE ?) ORDER BY display_name LIMIT 50"
   ).bind(query, pattern, pattern).all();
   return json({ accounts: result.results || [] });
 }
@@ -607,7 +607,7 @@ async function handle(request, env = {}) {
   } else if (url.pathname === "/v1/auth/session") {
     response = json({ error: "method_not_allowed" }, 405, { allow: "POST, OPTIONS" });
   } else if (url.pathname === "/v1/me") {
-    response = json({ error: "method_not_allowed" }, 405, { allow: "GET, OPTIONS" });
+    response = json({ error: "method_not_allowed" }, 405, { allow: "GET, POST, PATCH, OPTIONS" });
   } else if (request.method !== "GET") {
     response = json({ error: "method_not_allowed" }, 405, { allow: "GET, OPTIONS" });
   } else {
