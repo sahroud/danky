@@ -70,7 +70,7 @@ APIهای کنترل دسترسی و سهمیه در شاخه توسعه پیا�
 
 - `src/index.js` — Worker مرکزی
 - `client/sahroud-central.js` — کتابخانه مشترک وب
-- `migrations/` — migrationهای نسخه‌دار D1
+- `migrations/` — migrationهای نسخه‌دار D1؛ migration شماره ۰۰۸ جداول ثبت دستگاه و نشست‌های محصول را اضافه می‌کند (فعلاً schema-only)
 - `test/worker.test.js` و `test/client.test.js` — آزمون API و کلاینت
 - `test/schema.test.py` — اعتبارسنجی همه migrationها با SQLite
 - `wrangler.toml` — نام Worker، binding پایگاه داده و مسیر migration
