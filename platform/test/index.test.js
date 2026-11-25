@@ -369,3 +369,27 @@ test("concurrent consume attempts never exceed a finite usage limit (atomic D1 m
   assert.equal(usedCount, limit);
   assert.deepEqual(attempts.filter(x => x.consumed).map(x => x.usedCount).sort((a,b) => a-b), [1,2,3,4,5]);
 });
+
+
+test("admin account and grant management routes require Firebase authentication", async () => {
+  const cases = [
+    ["/v1/admin/accounts", "GET"],
+    ["/v1/admin/accounts/account-a/grants", "GET"],
+    ["/v1/admin/accounts/account-a/grants", "POST"],
+    ["/v1/admin/grants/grant-1", "PATCH"]
+  ];
+  for (const [path, method] of cases) {
+    const response = await handle(request(path, { method }), { FIREBASE_PROJECT_ID: "sahroud-central-test" });
+    assert.equal(response.status, 401, path + " " + method);
+    assert.equal((await response.json()).error, "authentication_required");
+  }
+});
+
+test("CORS preflight advertises PATCH for grant administration", async () => {
+  const response = await handle(request("/v1/admin/grants/grant-1", {
+    method: "OPTIONS",
+    headers: { Origin: "https://sahroud.github.io" }
+  }), { CORS_ALLOWED_ORIGINS: "https://sahroud.github.io" });
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get("access-control-allow-methods"), "GET, POST, PATCH, OPTIONS");
+});
