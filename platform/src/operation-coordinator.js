@@ -102,7 +102,7 @@ export function heartbeat(state, input) {
   }
   purge(state, now);
   const lease = state.leases[leaseId];
-  if (!lease) return { status: "not_found" };
+  if (!lease || lease.accountId !== input.accountId || lease.productKey !== input.productKey) return { status: "not_found" };
   lease.expiresAt = Math.min(now + leaseSeconds, lease.createdAt + maxLifetimeSeconds, lease.maxExpiresAt);
   return lease.expiresAt <= now
     ? { status: "max_lifetime" }
@@ -116,8 +116,9 @@ export function release(state, input) {
     return { status: "invalid_request" };
   }
   purge(state, now);
-  const existed = Boolean(state.leases[leaseId]);
-  delete state.leases[leaseId];
+  const lease = state.leases[leaseId];
+  const existed = Boolean(lease && lease.accountId === input.accountId && lease.productKey === input.productKey);
+  if (existed) delete state.leases[leaseId];
   promote(state, now, cap, leaseSeconds, maxLifetimeSeconds);
   return { status: "released", existed };
 }
