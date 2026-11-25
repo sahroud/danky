@@ -194,7 +194,7 @@ $("createGrant").addEventListener("click",async()=>{
  try{
   const account=$("accountSelect").value,product=$("grantProduct").value,feature=$("grantFeature").value;
   if(!account||!product||!feature)throw new Error("حساب، محصول و قابلیت را انتخاب کنید.");
-  const toIso=id=>$(id).value?new Date($ (id).value).toISOString():null;
+  const toIso=id=>$(id).value?new Date($(id).value).toISOString():null;
   const limit=$("grantLimit").value===""?null:Number($("grantLimit").value);
   const payload={product_key:product,feature_key:feature,source_type:$("grantSource").value,starts_at:toIso("grantStarts"),ends_at:toIso("grantEnds"),usage_limit:limit};
   await api("/v1/admin/accounts/"+encodeURIComponent(account)+"/grants",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
