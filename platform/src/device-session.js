@@ -43,8 +43,7 @@ export async function loadEffectiveDeviceSessionPolicy(db, accountId, productKey
   const maxSessionsPerAccount = cap(product.max_sessions_per_account, override?.max_sessions_per_account);
   const sessionLeaseSeconds = Number(product.session_lease_seconds);
   if (maxDevicesPerAccount === null || maxSessionsPerAccount === null ||
-      !Number.isSafeInteger(sessionLeaseSeconds) || sessionLeaseSeconds < 30 || sessionLeaseSeconds > 86400 ||
-      maxSessionsPerAccount > maxDevicesPerAccount) {
+      !Number.isSafeInteger(sessionLeaseSeconds) || sessionLeaseSeconds < 30 || sessionLeaseSeconds > 86400) {
     throw Object.assign(new Error("device_session_policy_not_configured"), { status: 503 });
   }
   return { maxDevicesPerAccount, maxSessionsPerAccount, sessionLeaseSeconds };
