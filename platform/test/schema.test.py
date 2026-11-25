@@ -203,14 +203,15 @@ connection.execute(
     "INSERT INTO product_runtime_policies "
     "(product_key, max_devices_per_account, max_sessions_per_account, "
     "session_lease_seconds, max_concurrent_operations, max_queued_operations, "
-    "queue_wait_seconds, updated_at) "
-    "VALUES ('steel', 3, 2, 300, 8, 20, 60, 'now')"
+    "queue_wait_seconds, operation_lease_seconds, max_operation_lifetime_seconds, updated_at) "
+    "VALUES ('steel', 3, 2, 300, 8, 20, 60, 300, 3600, 'now')"
 )
 connection.execute(
     "INSERT INTO account_product_policy_overrides "
     "(account_id, product_key, max_devices_per_account, max_sessions_per_account, "
-    "max_concurrent_operations, max_queued_operations, updated_at) "
-    "VALUES ('a1', 'steel', 2, NULL, 4, NULL, 'now')"
+    "max_concurrent_operations, max_queued_operations, operation_lease_seconds, "
+    "max_operation_lifetime_seconds, updated_at) "
+    "VALUES ('a1', 'steel', 2, NULL, 4, NULL, 120, 1800, 'now')"
 )
 policy = connection.execute(
     "SELECT max_devices_per_account, max_sessions_per_account, "
@@ -224,6 +225,16 @@ override = connection.execute(
     "FROM account_product_policy_overrides WHERE account_id='a1' AND product_key='steel'"
 ).fetchone()
 assert override == (2, None, 4, None), f"NULL override values must inherit product defaults: {override}"
+lease_override = connection.execute(
+    "SELECT operation_lease_seconds, max_operation_lifetime_seconds "
+    "FROM account_product_policy_overrides WHERE account_id='a1' AND product_key='steel'"
+).fetchone()
+assert lease_override == (120, 1800), f"Unexpected operation lease override: {lease_override}"
+product_lease = connection.execute(
+    "SELECT operation_lease_seconds, max_operation_lifetime_seconds "
+    "FROM product_runtime_policies WHERE product_key='steel'"
+).fetchone()
+assert product_lease == (300, 3600), f"Unexpected operation lease defaults: {product_lease}"
 try:
     connection.execute(
         "INSERT INTO product_runtime_policies "
