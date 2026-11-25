@@ -67,6 +67,18 @@ button.secondary{background:#21465b;color:#effaff;border:1px solid #3a6278}butto
 <div class="status" id="grantStatus" role="status">برای صدور مجوز، حساب و قابلیت را انتخاب کنید. تاریخ پایان خالی به معنی دسترسی دائمی است.</div>
 <div id="grantList" style="margin-top:12px"></div>
 </section>
+<section class="panel hidden" id="subscriptionsPanel">
+<h2>۵. مدیریت اشتراک‌های حساب</h2>
+<div class="grid">
+<div><label for="subscriptionProduct">محصول اشتراک</label><select id="subscriptionProduct"></select></div>
+<div><label for="subscriptionPlan">طرح اشتراک فعال</label><select id="subscriptionPlan"><option value="">ابتدا محصول را انتخاب کنید</option></select></div>
+<div><label for="subscriptionStarts">شروع اشتراک (اختیاری)</label><input id="subscriptionStarts" type="datetime-local"></div>
+<div><label for="subscriptionEnds">پایان اشتراک (خالی = بدون تاریخ پایان)</label><input id="subscriptionEnds" type="datetime-local"></div>
+</div>
+<div class="actions"><button id="createSubscription">صدور اشتراک دستی</button><button class="secondary" id="refreshSubscriptions">به‌روزرسانی اشتراک‌ها</button></div>
+<div class="status" id="subscriptionStatus" role="status">ابتدا حساب کاربری را در بخش مجوزها انتخاب کنید.</div>
+<div id="subscriptionList" style="margin-top:12px"></div>
+</section>
 <section class="panel hidden" id="editor">
 <h2>۳. تعریف یا ویرایش قابلیت</h2>
 <div class="grid">
@@ -120,6 +132,36 @@ async function loadFeatures(){
  }catch(e){status("saveStatus","دریافت قابلیت‌ها ناموفق بود: "+e.message,true);}
 }
 
+
+async function loadSubscriptionPlans(){
+ try{
+  const product=$("subscriptionProduct").value;if(!product)return;
+  const data=await api("/v1/admin/products/"+encodeURIComponent(product)+"/plans");
+  $("subscriptionPlan").replaceChildren();
+  for(const p of data.plans||[]){if(!p.is_active)continue;const o=document.createElement("option");o.value=p.plan_code;o.textContent=p.display_name+" · "+p.plan_code+" · "+p.feature_count+" قابلیت";$("subscriptionPlan").append(o);}
+  if(!$("subscriptionPlan").options.length){const o=document.createElement("option");o.value="";o.textContent="برای این محصول طرح فعالی ثبت نشده است";$("subscriptionPlan").append(o);}
+ }catch(e){status("subscriptionStatus","دریافت طرح‌ها ناموفق بود: "+e.message,true);}
+}
+async function loadAccountSubscriptions(){
+ try{
+  const account=$("accountSelect").value;if(!account)return;
+  const data=await api("/v1/admin/accounts/"+encodeURIComponent(account)+"/subscriptions");
+  $("subscriptionList").replaceChildren();
+  if(!data.subscriptions?.length){$("subscriptionList").textContent="برای این حساب اشتراکی ثبت نشده است.";return;}
+  for(const sub of data.subscriptions){
+   const card=document.createElement("div");card.className="feature";
+   const title=document.createElement("strong");title.textContent=sub.plan_name+" · "+sub.product_key;
+   const details=document.createElement("div");details.className="muted";details.textContent="وضعیت: "+sub.status+" | شروع: "+(sub.starts_at||"بدون محدودیت")+" | پایان: "+(sub.ends_at||"بدون تاریخ پایان")+" | شناسه: "+sub.id;
+   const actions=document.createElement("div");actions.className="actions";
+   for(const [label,value] of [["فعال","active"],["در انتظار","pending"],["معوق","past_due"],["لغو","cancelled"],["منقضی","expired"]]){
+    const b=document.createElement("button");b.className="secondary";b.textContent=label;b.addEventListener("click",async()=>{try{await api("/v1/admin/subscriptions/"+encodeURIComponent(sub.id),{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:value})});status("subscriptionStatus","وضعیت اشتراک به‌روزرسانی شد.");await loadAccountSubscriptions();}catch(e){status("subscriptionStatus","تغییر وضعیت ناموفق بود: "+e.message,true);}});actions.append(b);
+   }
+   const expiry=document.createElement("input");expiry.type="datetime-local";expiry.setAttribute("aria-label","تاریخ پایان جدید اشتراک");if(sub.ends_at)expiry.value=new Date(sub.ends_at).toISOString().slice(0,16);
+   const update=document.createElement("button");update.className="secondary";update.textContent="تمدید / ثبت پایان";update.addEventListener("click",async()=>{try{const ends_at=expiry.value?new Date(expiry.value).toISOString():null;await api("/v1/admin/subscriptions/"+encodeURIComponent(sub.id),{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({ends_at})});status("subscriptionStatus","تاریخ پایان اشتراک تغییر کرد.");await loadAccountSubscriptions();}catch(e){status("subscriptionStatus","تمدید اشتراک ناموفق بود: "+e.message,true);}});actions.append(expiry,update);
+   card.append(title,details,actions);$("subscriptionList").append(card);
+  }
+ }catch(e){status("subscriptionStatus","دریافت اشتراک‌ها ناموفق بود: "+e.message,true);}
+}
 async function searchAccounts(){
  try{
   const q=$("accountQuery").value.trim();
@@ -179,16 +221,32 @@ $("login").addEventListener("click",async()=>{
   products=(await catalog.json()).products||[];
   $("product").replaceChildren();
   for(const p of products){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("product").append(o);}
-  $("workspace").classList.remove("hidden");$("editor").classList.remove("hidden");$("grantsPanel").classList.remove("hidden");$("logout").disabled=false;$("login").disabled=true;
-  $("grantProduct").replaceChildren();for(const p of products){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("grantProduct").append(o);}await loadGrantFeatures();
+  $("workspace").classList.remove("hidden");$("editor").classList.remove("hidden");$("grantsPanel").classList.remove("hidden");$("subscriptionsPanel").classList.remove("hidden");$("logout").disabled=false;$("login").disabled=true;
+  $("grantProduct").replaceChildren();for(const p of products){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("grantProduct").append(o);}await loadGrantFeatures();$("subscriptionProduct").replaceChildren();for(const p of products){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("subscriptionProduct").append(o);}await loadSubscriptionPlans();
   status("authStatus","ورود Firebase انجام شد: "+user.email+"\nاکنون دسترسی مدیر از API مرکزی بررسی می‌شود.");
   await loadFeatures();
  }catch(e){status("authStatus","ورود یا بررسی دسترسی مدیر ناموفق بود: "+e.message,true);}
 });
-$("logout").addEventListener("click",async()=>{try{if(auth)await auth.signOut();}finally{auth=null;user=null;token=null;$("workspace").classList.add("hidden");$("editor").classList.add("hidden");$("grantsPanel").classList.add("hidden");$("logout").disabled=true;$("login").disabled=false;status("authStatus","از حساب خارج شدید.");}});
+$("logout").addEventListener("click",async()=>{try{if(auth)await auth.signOut();}finally{auth=null;user=null;token=null;$("workspace").classList.add("hidden");$("editor").classList.add("hidden");$("grantsPanel").classList.add("hidden");$("subscriptionsPanel").classList.add("hidden");$("logout").disabled=true;$("login").disabled=false;status("authStatus","از حساب خارج شدید.");}});
 $("product").addEventListener("change",loadFeatures);
 $("newFeature").addEventListener("click",()=>{resetForm();status("saveStatus","فرم برای تعریف قابلیت جدید آماده است.");});
 
+
+$("subscriptionProduct").addEventListener("change",loadSubscriptionPlans);
+$("refreshSubscriptions").addEventListener("click",loadAccountSubscriptions);
+$("accountSelect").addEventListener("change",()=>{loadAccountGrants();loadAccountSubscriptions();});
+$("createSubscription").addEventListener("click",async()=>{
+ try{
+  const account=$("accountSelect").value,product=$("subscriptionProduct").value,plan=$("subscriptionPlan").value;
+  if(!account||!product||!plan)throw new Error("حساب، محصول و طرح را انتخاب کنید.");
+  const toIso=id=>$(id).value?new Date($(id).value).toISOString():null;
+  const payload={product_key:product,plan_code:plan,starts_at:toIso("subscriptionStarts"),ends_at:toIso("subscriptionEnds")};
+  await api("/v1/admin/accounts/"+encodeURIComponent(account)+"/subscriptions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+  status("subscriptionStatus",payload.ends_at?"اشتراک زمان‌دار صادر شد.":"اشتراک بدون تاریخ پایان صادر شد.");
+  $("subscriptionStarts").value="";$("subscriptionEnds").value="";
+  await loadAccountSubscriptions();
+ }catch(e){status("subscriptionStatus","صدور اشتراک انجام نشد: "+e.message,true);}
+});
 $("searchAccounts").addEventListener("click",searchAccounts);
 $("accountSelect").addEventListener("change",loadAccountGrants);
 $("grantProduct").addEventListener("change",loadGrantFeatures);
