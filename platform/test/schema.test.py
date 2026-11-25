@@ -34,6 +34,8 @@ required = {
     "checkout_orders",
     "payment_attempts",
     "payment_webhook_events",
+    "product_runtime_policies",
+    "account_product_policy_overrides",
 }
 assert required.issubset(tables), f"Missing tables: {required - tables}"
 
@@ -194,6 +196,44 @@ mapped_features = connection.execute(
     "WHERE s.account_id='a1' AND s.status='active' AND pf.feature_key='dxf-export'"
 ).fetchone()[0]
 assert mapped_features == 1, "Active product plans must map to included features"
+
+
+# Product runtime admission policies are configurable metadata, separate from sessions.
+connection.execute(
+    "INSERT INTO product_runtime_policies "
+    "(product_key, max_devices_per_account, max_sessions_per_account, "
+    "session_lease_seconds, max_concurrent_operations, max_queued_operations, "
+    "queue_wait_seconds, updated_at) "
+    "VALUES ('steel', 3, 2, 300, 8, 20, 60, 'now')"
+)
+connection.execute(
+    "INSERT INTO account_product_policy_overrides "
+    "(account_id, product_key, max_devices_per_account, max_sessions_per_account, "
+    "max_concurrent_operations, max_queued_operations, updated_at) "
+    "VALUES ('a1', 'steel', 2, NULL, 4, NULL, 'now')"
+)
+policy = connection.execute(
+    "SELECT max_devices_per_account, max_sessions_per_account, "
+    "max_concurrent_operations, max_queued_operations "
+    "FROM product_runtime_policies WHERE product_key='steel'"
+).fetchone()
+assert policy == (3, 2, 8, 20), f"Unexpected product runtime policy: {policy}"
+override = connection.execute(
+    "SELECT max_devices_per_account, max_sessions_per_account, "
+    "max_concurrent_operations, max_queued_operations "
+    "FROM account_product_policy_overrides WHERE account_id='a1' AND product_key='steel'"
+).fetchone()
+assert override == (2, None, 4, None), f"NULL override values must inherit product defaults: {override}"
+try:
+    connection.execute(
+        "INSERT INTO product_runtime_policies "
+        "(product_key, max_devices_per_account, session_lease_seconds, updated_at) "
+        "VALUES ('utm', 0, 10, 'now')"
+    )
+except sqlite3.IntegrityError:
+    pass
+else:
+    raise AssertionError("Invalid device limit or lease duration was accepted")
 
 print("SAHROUD Central schema tests passed")
 
