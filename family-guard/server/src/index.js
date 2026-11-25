@@ -91,7 +91,7 @@ async function handle(request, env) {
       ).bind(family.id).first();
       if (existingParent) response = json({ error: "second_parent_already_exists" }, 409);
       else {
-      const code = randomToken(4).toUpperCase();
+      const code = randomToken(8).toUpperCase();
       const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
       await env.DB.prepare(
         "INSERT INTO parent_invites (code_hash, family_id, expires_at, created_at) VALUES (?, ?, ?, ?)"
@@ -155,7 +155,7 @@ async function handle(request, env) {
     else if (!ownerOnly(family)) response = json({ error: "owner_required" }, 403);
     else if (!paidParentActive(family)) response = json({ error: "subscription_inactive", subscription_required: true }, 402);
     else {
-      const code = randomToken(4).toUpperCase();
+      const code = randomToken(8).toUpperCase();
       const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
       await env.DB.prepare(
         "INSERT INTO invites (code_hash, family_id, expires_at, created_at) VALUES (?, ?, ?, ?)"
@@ -200,18 +200,20 @@ async function handle(request, env) {
   } else if (url.pathname === "/v1/location" && request.method === "POST") {
     const device = await deviceAuth(request, env);
     const input = await body(request);
-    const lat = Number(input?.latitude);
-    const lon = Number(input?.longitude);
-    const accuracy = input?.accuracy_m == null ? null : Number(input.accuracy_m);
+    const lat = input?.latitude;
+    const lon = input?.longitude;
+    const accuracy = input?.accuracy_m == null ? null : input.accuracy_m;
     if (!device) response = json({ error: "unauthorized" }, 401);
     else if (!device.sharing_enabled) response = json({ error: "sharing_disabled" }, 403);
-    else if (!Number.isFinite(lat) || lat < -90 || lat > 90 ||
-             !Number.isFinite(lon) || lon < -180 || lon > 180 ||
-             (accuracy !== null && (!Number.isFinite(accuracy) || accuracy < 0))) {
+    else if (typeof lat !== "number" || !Number.isFinite(lat) || lat < -90 || lat > 90 ||
+             typeof lon !== "number" || !Number.isFinite(lon) || lon < -180 || lon > 180 ||
+             (accuracy !== null && (typeof accuracy !== "number" || !Number.isFinite(accuracy) || accuracy < 0 || accuracy > 10000))) {
       response = json({ error: "invalid_coordinates_or_accuracy" }, 400);
     } else {
-      const recordedAt = input?.recorded_at && !Number.isNaN(Date.parse(input.recorded_at))
-        ? new Date(input.recorded_at).toISOString() : now();
+      const requestedRecordedAt = input?.recorded_at ? Date.parse(input.recorded_at) : NaN;
+      // Do not let a device submit a far-future timestamp and pin the family map to it.
+      const recordedAt = Number.isFinite(requestedRecordedAt) && requestedRecordedAt <= Date.now() + 5 * 60 * 1000
+        ? new Date(requestedRecordedAt).toISOString() : now();
       await env.DB.batch([
         env.DB.prepare(
           "INSERT INTO locations (device_id, latitude, longitude, accuracy_m, recorded_at, received_at) VALUES (?, ?, ?, ?, ?, ?)"
