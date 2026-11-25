@@ -737,7 +737,10 @@ async function handle(request, env = {}) {
     response = await adminCreateSubscription(request, env, decodeURIComponent(url.pathname.split("/")[4]));
   } else if (request.method === "PATCH" && /^\/v1\/admin\/subscriptions\/[^/]+$/.test(url.pathname)) {
     response = await adminUpdateSubscription(request, env, decodeURIComponent(url.pathname.split("/")[4]));
-  } else if (request.method === "PATCH" && /^\\/v1\\/admin\\/products\\/[a-z0-9-]+\\/plans\\/[^/]+$/.test(url.pathname)) {\n    const parts = url.pathname.split("/");\n    response = await adminUpdatePlan(request, env, parts[4], decodeURIComponent(parts[6]));\n  } else if (request.method === "GET" && url.pathname === "/v1/admin/accounts") {
+  } else if (request.method === "PATCH" && /^\/v1\/admin\/products\/[a-z0-9-]+\/plans\/[^/]+$/.test(url.pathname)) {
+    const parts = url.pathname.split("/");
+    response = await adminUpdatePlan(request, env, parts[4], decodeURIComponent(parts[6]));
+  } else if (request.method === "GET" && url.pathname === "/v1/admin/accounts") {
     response = await adminAccountList(request, env);
   } else if (request.method === "GET" && /^\/v1\/admin\/accounts\/[^/]+\/grants$/.test(url.pathname)) {
     response = await adminAccountGrants(request, env, decodeURIComponent(url.pathname.split("/")[4]));
