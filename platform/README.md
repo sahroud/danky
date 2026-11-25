@@ -53,7 +53,18 @@
 - `GET /v1/catalog/products` — کاتالوگ از D1 مرکزی
 - `GET /v1/catalog/products/{product_key}` — اطلاعات عمومی محصول
 
-API عمومی کاتالوگ فقط خواندنی است. مسیرهای اولیه احراز هویت Firebase در شاخه توسعه پیاده‌سازی شده‌اند، اما تا تنظیم Project ID در Cloudflare و آزمایش واقعی providerها فعال نیستند. ایجاد/ابطال مجوز، اشتراک، پرداخت و کنترل دسترسی محصول هنوز تکمیل نشده‌اند.
+APIهای کنترل دسترسی و سهمیه در شاخه توسعه پیاده‌سازی شده‌اند. احراز هویت واقعی Worker به تنظیم Firebase Project ID و secretهای محیطی نیاز دارد؛ تا آن زمان مسیرهای محافظت‌شده عملاً قابل استفاده نیستند.
+
+مسیرهای عملیاتی شاخه توسعه:
+- `GET /v1/access/{product_key}/{feature_key}` — بررسی دسترسی
+- `POST /v1/access/{product_key}/{feature_key}/consume` — مصرف اتمیک سهمیه
+- `POST /v1/operations/{product_key}/{feature_key}/acquire` — درخواست مجوز عملیات؛ بدنه شامل `request_id` یکتا برای retry
+- `POST /v1/operations/{product_key}/{feature_key}/heartbeat` — تمدید مجوز با `lease_id`
+- `POST /v1/operations/{product_key}/{feature_key}/release` — آزادسازی مجوز با `lease_id`
+
+مسیرهای عملیاتی به Firebase Bearer token و در حساب‌های چندعضوی به هدر `X-Sahroud-Account-Id` نیاز دارند. Worker عضویت و اشتراک/مجوز قابلیت را بررسی می‌کند؛ سپس یک assertion کوتاه‌عمر HMAC را به DO داخلی محصول می‌فرستد. DO مستقیماً در معرض اینترنت قرار نمی‌گیرد. سقف هم‌زمان محصول و سقف هر حساب، و همچنین سقف صف محصول و صف هر حساب مستقل‌اند.
+
+این اتصال فقط در شاخه توسعه است؛ دستگاه‌ها و نشست‌های مستقل هنوز پیاده‌سازی نشده‌اند و بک‌اند محصولات هنوز باید acquire/heartbeat/release را در چرخه واقعی کار خود به‌کار بگیرند. هیچ استقرار یا migration راه‌دور در این تغییر انجام نشده است.
 
 ## ساختار پوشه
 
