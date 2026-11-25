@@ -62,6 +62,12 @@ async function readBody(request) {
   } catch { return null; }
 }
 
+async function expireStaleSessions(db, accountId, productKey, now) {
+  await db.prepare(
+    "UPDATE account_product_sessions SET status='expired',updated_at=? WHERE account_id=? AND product_key=? AND status='active' AND expires_at<=?"
+  ).bind(now, accountId, productKey, now).run();
+}
+
 /**
  * Device IDs identify app installations, not guaranteed physical hardware.
  * The caller must authenticate Firebase before calling this lifecycle handler.
@@ -108,6 +114,7 @@ export async function handleDeviceSession(request, env, identity, productKey, re
   }
 
   if (resource === "devices" && action === "list") {
+    await expireStaleSessions(env.CORE_DB, account.account_id, productKey, now);
     const rows = await env.CORE_DB.prepare(
       "SELECT device_id,device_label,platform,status,first_seen_at,last_seen_at,revoked_at FROM account_product_devices WHERE account_id=? AND product_key=? ORDER BY last_seen_at DESC"
     ).bind(account.account_id, productKey).all();
@@ -124,6 +131,7 @@ export async function handleDeviceSession(request, env, identity, productKey, re
   }
 
   if (resource === "sessions" && action === "open") {
+    await expireStaleSessions(env.CORE_DB, account.account_id, productKey, now);
     if (!validDeviceId(body.device_id)) return json({ error: "valid_device_id_required" }, 400);
     const sessionId = crypto.randomUUID();
     const rawTokenBytes = crypto.getRandomValues(new Uint8Array(32));
@@ -150,6 +158,7 @@ export async function handleDeviceSession(request, env, identity, productKey, re
     if (typeof rawToken !== "string" || !/^[a-f0-9]{64}$/.test(rawToken)) return json({ error: "valid_session_token_required" }, 400);
     const hash = await tokenHash(rawToken);
     if (action === "heartbeat") {
+      await expireStaleSessions(env.CORE_DB, account.account_id, productKey, now);
       const expiresAt = new Date(Date.now() + policy.sessionLeaseSeconds * 1000).toISOString();
       const updated = await env.CORE_DB.prepare(
         "UPDATE account_product_sessions SET expires_at=?,last_seen_at=?,updated_at=? WHERE account_id=? AND product_key=? AND token_hash=? AND status='active' AND expires_at>? AND EXISTS (SELECT 1 FROM account_product_devices d WHERE d.account_id=account_product_sessions.account_id AND d.product_key=account_product_sessions.product_key AND d.device_id=account_product_sessions.device_id AND d.status='active') RETURNING session_id,expires_at"
