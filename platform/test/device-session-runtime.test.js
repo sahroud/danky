@@ -12,10 +12,15 @@ const request = (path, body, headers = {}) => new Request("https://central.test"
 });
 const call = (req, resource, action) => handleDeviceSession(req, { CORE_DB: env.CORE_DB }, identity, productKey, resource, action);
 const deviceId = i => "install-" + String(i).padStart(4, "0");
+const execStatements = async sql => {
+  for (const statement of sql.split(";").map(value => value.trim()).filter(Boolean)) {
+    await env.CORE_DB.exec(statement);
+  }
+};
 
 describe("D1 device and session lifecycle concurrency", () => {
   beforeAll(async () => {
-    await env.CORE_DB.exec(`
+    await execStatements(`
       DROP TABLE IF EXISTS account_product_sessions;
       DROP TABLE IF EXISTS account_product_devices;
       DROP TABLE IF EXISTS account_product_policy_overrides;
