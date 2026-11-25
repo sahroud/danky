@@ -48,6 +48,7 @@ async function verifyAssertion(token, secret, now, action) {
       typeof payload.productKey !== "string" || !/^[a-z0-9-]{2,64}$/.test(payload.productKey) ||
       !Number.isSafeInteger(payload.expiresAt) || payload.expiresAt <= now ||
       !Number.isSafeInteger(payload.cap) || payload.cap < 1 ||
+      !Number.isSafeInteger(payload.accountCap) || payload.accountCap < 1 ||
       !Number.isSafeInteger(payload.leaseSeconds) || payload.leaseSeconds < 1 ||
       !Number.isSafeInteger(payload.maxLifetimeSeconds) || payload.maxLifetimeSeconds < payload.leaseSeconds ||
       !Number.isSafeInteger(payload.queueLimit) || payload.queueLimit < 0 ||
@@ -117,7 +118,7 @@ export class OperationCoordinatorDO {
     const input = {
       ...requestInput, now,
       accountId: assertion.accountId, productKey: assertion.productKey,
-      cap: assertion.cap, leaseSeconds: assertion.leaseSeconds,
+      cap: assertion.cap, accountCap: assertion.accountCap, leaseSeconds: assertion.leaseSeconds,
       maxLifetimeSeconds: assertion.maxLifetimeSeconds,
       queueLimit: assertion.queueLimit, maxWaitSeconds: assertion.maxWaitSeconds,
       ...(action === "acquire" ? { requestId: assertion.requestId, leaseId: assertion.leaseId } : {}),
@@ -136,6 +137,7 @@ export class OperationCoordinatorDO {
         await transaction.put("coordinator-state", state);
         await transaction.put("coordinator-policy", {
           cap: assertion.cap,
+          accountCap: assertion.accountCap,
           leaseSeconds: assertion.leaseSeconds,
           maxLifetimeSeconds: assertion.maxLifetimeSeconds
         });
