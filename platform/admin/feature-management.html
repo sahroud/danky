@@ -89,6 +89,7 @@ button.secondary{background:#21465b;color:#effaff;border:1px solid #3a6278}butto
 </div>
 <div class="actions"><button id="savePlan">ذخیره طرح و قابلیت‌ها</button></div>
 <div class="muted">محصول از بخش اشتراک انتخاب می‌شود. فقط قابلیت‌های پولی و فعال قابل افزودن هستند. با ذخیره دوبارهٔ همان کد، ترکیب قابلیت‌ها به‌روزرسانی می‌شود.</div>
+<div id="planAdminList" style="margin-top:12px"></div>
 </section>
 <section class="panel hidden" id="editor">
 <h2>۳. تعریف یا ویرایش قابلیت</h2>
@@ -157,8 +158,16 @@ async function loadSubscriptionPlans(){
  try{
   const product=$("subscriptionProduct").value;if(!product)return;
   const data=await api("/v1/admin/products/"+encodeURIComponent(product)+"/plans");
-  $("subscriptionPlan").replaceChildren();
-  for(const p of data.plans||[]){if(!p.is_active)continue;const o=document.createElement("option");o.value=p.plan_code;o.textContent=p.display_name+" · "+p.plan_code+" · "+p.feature_count+" قابلیت";$("subscriptionPlan").append(o);}
+  $("subscriptionPlan").replaceChildren();$("planAdminList").replaceChildren();
+  for(const p of data.plans||[]){
+   if(p.is_active){const o=document.createElement("option");o.value=p.plan_code;o.textContent=p.display_name+" · "+p.plan_code+" · "+p.feature_count+" قابلیت";$("subscriptionPlan").append(o);}
+   const card=document.createElement("div");card.className="feature";
+   const title=document.createElement("strong");title.textContent=p.display_name+" · "+p.plan_code;
+   const info=document.createElement("div");info.className="muted";info.textContent=(p.is_active?"فعال":"غیرفعال")+" · "+p.feature_count+" قابلیت";
+   const toggle=document.createElement("button");toggle.className="secondary";toggle.textContent=p.is_active?"غیرفعال‌سازی طرح":"فعال‌سازی طرح";
+   toggle.addEventListener("click",async()=>{try{await api("/v1/admin/products/"+encodeURIComponent(product)+"/plans/"+encodeURIComponent(p.plan_code),{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({is_active:!p.is_active})});status("subscriptionStatus","وضعیت طرح تغییر کرد.");await loadSubscriptionPlans();}catch(e){status("subscriptionStatus","تغییر وضعیت طرح ناموفق بود: "+e.message,true);}});
+   card.append(title,info,toggle);$("planAdminList").append(card);
+  }
   if(!$("subscriptionPlan").options.length){const o=document.createElement("option");o.value="";o.textContent="برای این محصول طرح فعالی ثبت نشده است";$("subscriptionPlan").append(o);}
  }catch(e){status("subscriptionStatus","دریافت طرح‌ها ناموفق بود: "+e.message,true);}
 }
