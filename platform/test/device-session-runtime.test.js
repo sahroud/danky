@@ -102,6 +102,73 @@ describe("D1 device and session lifecycle concurrency", () => {
     }
   });
 
+
+  it("extends valid leases, expires stale sessions, and never revives revoked sessions", async () => {
+    await env.CORE_DB.prepare("UPDATE product_runtime_policies SET max_sessions_per_account=10 WHERE product_key='steel'").run();
+    const device = deviceId(100);
+    const openedResponse = await call(request("/v1/sessions/steel/open", { device_id: device }), "sessions", "open");
+    expect(openedResponse.status).toBe(200);
+    const opened = await openedResponse.json();
+    const tokenHeader = { "X-Sahroud-Session-Token": opened.session_token };
+
+    const before = await env.CORE_DB.prepare(
+      "SELECT expires_at,last_seen_at FROM account_product_sessions WHERE session_id=?"
+    ).bind(opened.session_id).first();
+    const heartbeatResponse = await call(request("/v1/sessions/steel/heartbeat", {}, tokenHeader), "sessions", "heartbeat");
+    expect(heartbeatResponse.status).toBe(200);
+    const heartbeat = await heartbeatResponse.json();
+    expect(heartbeat.heartbeat).toBe(true);
+    const after = await env.CORE_DB.prepare(
+      "SELECT expires_at,last_seen_at,status FROM account_product_sessions WHERE session_id=?"
+    ).bind(opened.session_id).first();
+    expect(Date.parse(after.expires_at)).toBeGreaterThan(Date.parse(before.expires_at));
+    expect(after.status).toBe("active");
+
+    await env.CORE_DB.prepare(
+      "UPDATE account_product_sessions SET expires_at='2000-01-01T00:00:00.000Z' WHERE session_id=?"
+    ).bind(opened.session_id).run();
+    const expiredHeartbeat = await call(request("/v1/sessions/steel/heartbeat", {}, tokenHeader), "sessions", "heartbeat");
+    expect(expiredHeartbeat.status).toBe(404);
+    const expiredRow = await env.CORE_DB.prepare(
+      "SELECT status FROM account_product_sessions WHERE session_id=?"
+    ).bind(opened.session_id).first();
+    expect(expiredRow.status).toBe("expired");
+
+    const nextOpenResponse = await call(request("/v1/sessions/steel/open", { device_id: device }), "sessions", "open");
+    expect(nextOpenResponse.status).toBe(200);
+    const nextOpen = await nextOpenResponse.json();
+    await call(request("/v1/devices/steel/revoke", { device_id: device }), "devices", "revoke");
+    const revokedHeartbeat = await call(
+      request("/v1/sessions/steel/heartbeat", {}, { "X-Sahroud-Session-Token": nextOpen.session_token }),
+      "sessions", "heartbeat"
+    );
+    expect(revokedHeartbeat.status).toBe(404);
+    const revokedRow = await env.CORE_DB.prepare(
+      "SELECT status FROM account_product_sessions WHERE session_id=?"
+    ).bind(nextOpen.session_id).first();
+    expect(revokedRow.status).toBe("revoked");
+  });
+
+  it("allows closing an expired-but-not-yet-cleaned session", async () => {
+    const device = deviceId(101);
+    const openedResponse = await call(request("/v1/sessions/steel/open", { device_id: device }), "sessions", "open");
+    expect(openedResponse.status).toBe(200);
+    const opened = await openedResponse.json();
+    await env.CORE_DB.prepare(
+      "UPDATE account_product_sessions SET expires_at='2000-01-01T00:00:00.000Z' WHERE session_id=?"
+    ).bind(opened.session_id).run();
+    const closed = await call(
+      request("/v1/sessions/steel/close", {}, { "X-Sahroud-Session-Token": opened.session_token }),
+      "sessions", "close"
+    );
+    expect(closed.status).toBe(200);
+    expect((await closed.json()).closed).toBe(true);
+    const row = await env.CORE_DB.prepare(
+      "SELECT status FROM account_product_sessions WHERE session_id=?"
+    ).bind(opened.session_id).first();
+    expect(row.status).toBe("revoked");
+  });
+
   it("device revocation invalidates all sessions belonging to that installation", async () => {
     const active = await env.CORE_DB.prepare(
       "SELECT session_id,device_id FROM account_product_sessions WHERE account_id=? AND product_key=? AND status='active' LIMIT 1"
