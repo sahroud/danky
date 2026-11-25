@@ -51,6 +51,22 @@ button.secondary{background:#21465b;color:#effaff;border:1px solid #3a6278}butto
 <div id="features" style="margin-top:12px"></div>
 </section>
 
+<section class="panel hidden" id="grantsPanel">
+<h2>۴. صدور و مدیریت مجوز کاربران</h2>
+<div class="grid">
+<div class="wide"><label for="accountQuery">جست‌وجوی حساب با نام یا شناسه</label><div class="actions"><input id="accountQuery" placeholder="نام حساب یا شناسه مرکزی"><button class="secondary" id="searchAccounts">جست‌وجو</button></div></div>
+<div class="wide"><label for="accountSelect">حساب کاربری</label><select id="accountSelect"><option value="">ابتدا حساب را جست‌وجو کنید</option></select></div>
+<div><label for="grantProduct">محصول</label><select id="grantProduct"></select></div>
+<div><label for="grantFeature">قابلیت</label><select id="grantFeature"><option value="">ابتدا محصول را انتخاب کنید</option></select></div>
+<div><label for="grantSource">نوع صدور</label><select id="grantSource"><option value="manual">دستی توسط مدیر</option><option value="promotion">هدیه / تبلیغاتی</option><option value="trial">آزمایشی</option><option value="purchase">خرید</option><option value="subscription">اشتراک</option></select></div>
+<div><label for="grantStarts">شروع دسترسی (اختیاری)</label><input id="grantStarts" type="datetime-local"></div>
+<div><label for="grantEnds">پایان دسترسی (خالی = دائمی)</label><input id="grantEnds" type="datetime-local"></div>
+<div><label for="grantLimit">سقف مصرف این مجوز (خالی = نامحدود)</label><input id="grantLimit" type="number" min="0" step="1"></div>
+</div>
+<div class="actions"><button id="createGrant">صدور مجوز</button><button class="secondary" id="refreshGrants">به‌روزرسانی فهرست مجوزها</button></div>
+<div class="status" id="grantStatus" role="status">برای صدور مجوز، حساب و قابلیت را انتخاب کنید. تاریخ پایان خالی به معنی دسترسی دائمی است.</div>
+<div id="grantList" style="margin-top:12px"></div>
+</section>
 <section class="panel hidden" id="editor">
 <h2>۳. تعریف یا ویرایش قابلیت</h2>
 <div class="grid">
@@ -103,6 +119,46 @@ async function loadFeatures(){
   status("saveStatus","فهرست قابلیت‌ها به‌روز شد.");
  }catch(e){status("saveStatus","دریافت قابلیت‌ها ناموفق بود: "+e.message,true);}
 }
+
+async function searchAccounts(){
+ try{
+  const q=$("accountQuery").value.trim();
+  const data=await api("/v1/admin/accounts?q="+encodeURIComponent(q));
+  $("accountSelect").replaceChildren();
+  for(const a of data.accounts||[]){const o=document.createElement("option");o.value=a.id;o.textContent=a.display_name+" · "+a.id;$("accountSelect").append(o);}
+  if(!(data.accounts||[]).length){const o=document.createElement("option");o.value="";o.textContent="حسابی یافت نشد";$("accountSelect").append(o);}
+  status("grantStatus",(data.accounts||[]).length+" حساب پیدا شد.");
+  if(data.accounts?.length)await loadAccountGrants();
+ }catch(e){status("grantStatus","جست‌وجوی حساب ناموفق بود: "+e.message,true);}
+}
+async function loadGrantFeatures(){
+ try{
+  const p=$("grantProduct").value;if(!p)return;
+  const data=await api("/v1/admin/products/"+encodeURIComponent(p)+"/features");
+  $("grantFeature").replaceChildren();
+  for(const f of data.features||[]){if(!f.enabled||f.access_mode==="disabled")continue;const o=document.createElement("option");o.value=f.key;o.textContent=f.name+" · "+f.key;$("grantFeature").append(o);}
+  if(!$("grantFeature").options.length){const o=document.createElement("option");o.value="";o.textContent="قابلیت فعالی برای صدور مجوز وجود ندارد";$("grantFeature").append(o);}
+ }catch(e){status("grantStatus","دریافت قابلیت‌ها ناموفق بود: "+e.message,true);}
+}
+async function loadAccountGrants(){
+ try{
+  const id=$("accountSelect").value;if(!id)return;
+  const data=await api("/v1/admin/accounts/"+encodeURIComponent(id)+"/grants");
+  $("grantList").replaceChildren();
+  if(!data.grants?.length){$("grantList").textContent="برای این حساب هنوز مجوزی ثبت نشده است.";return;}
+  for(const g of data.grants){
+   const card=document.createElement("div");card.className="feature";
+   const title=document.createElement("strong");title.textContent=g.feature_name+" · "+g.product_key;
+   const details=document.createElement("div");details.className="muted";
+   details.textContent="وضعیت: "+g.status+" | شروع: "+(g.starts_at||"بدون محدودیت")+" | پایان: "+(g.ends_at||"دائمی")+" | سقف: "+(g.usage_limit??"نامحدود")+" | شناسه: "+g.id;
+   const actions=document.createElement("div");actions.className="actions";
+   for(const [label,value] of [["فعال‌سازی","active"],["تعلیق","suspended"],["لغو","revoked"]]){
+    const b=document.createElement("button");b.className="secondary";b.textContent=label;b.addEventListener("click",async()=>{try{await api("/v1/admin/grants/"+encodeURIComponent(g.id),{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:value})});status("grantStatus","وضعیت مجوز تغییر کرد.");await loadAccountGrants();}catch(e){status("grantStatus","تغییر مجوز ناموفق بود: "+e.message,true);}});actions.append(b);
+   }
+   card.append(title,details,actions);$("grantList").append(card);
+  }
+ }catch(e){status("grantStatus","دریافت مجوزها ناموفق بود: "+e.message,true);}
+}
 $("login").addEventListener("click",async()=>{
  try{
   const cfg={apiKey:$("apiKey").value.trim(),authDomain:$("authDomain").value.trim(),projectId:$("projectId").value.trim(),appId:$("appId").value.trim()};
@@ -120,14 +176,33 @@ $("login").addEventListener("click",async()=>{
   products=(await catalog.json()).products||[];
   $("product").replaceChildren();
   for(const p of products){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("product").append(o);}
-  $("workspace").classList.remove("hidden");$("editor").classList.remove("hidden");$("logout").disabled=false;$("login").disabled=true;
+  $("workspace").classList.remove("hidden");$("editor").classList.remove("hidden");$("grantsPanel").classList.remove("hidden");$("logout").disabled=false;$("login").disabled=true;
+  $("grantProduct").replaceChildren();for(const p of products){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("grantProduct").append(o);}await loadGrantFeatures();
   status("authStatus","ورود Firebase انجام شد: "+user.email+"\nاکنون دسترسی مدیر از API مرکزی بررسی می‌شود.");
   await loadFeatures();
  }catch(e){status("authStatus","ورود یا بررسی دسترسی مدیر ناموفق بود: "+e.message,true);}
 });
-$("logout").addEventListener("click",async()=>{try{if(auth)await auth.signOut();}finally{auth=null;user=null;token=null;$("workspace").classList.add("hidden");$("editor").classList.add("hidden");$("logout").disabled=true;$("login").disabled=false;status("authStatus","از حساب خارج شدید.");}});
+$("logout").addEventListener("click",async()=>{try{if(auth)await auth.signOut();}finally{auth=null;user=null;token=null;$("workspace").classList.add("hidden");$("editor").classList.add("hidden");$("grantsPanel").classList.add("hidden");$("logout").disabled=true;$("login").disabled=false;status("authStatus","از حساب خارج شدید.");}});
 $("product").addEventListener("change",loadFeatures);
 $("newFeature").addEventListener("click",()=>{resetForm();status("saveStatus","فرم برای تعریف قابلیت جدید آماده است.");});
+
+$("searchAccounts").addEventListener("click",searchAccounts);
+$("accountSelect").addEventListener("change",loadAccountGrants);
+$("grantProduct").addEventListener("change",loadGrantFeatures);
+$("refreshGrants").addEventListener("click",loadAccountGrants);
+$("createGrant").addEventListener("click",async()=>{
+ try{
+  const account=$("accountSelect").value,product=$("grantProduct").value,feature=$("grantFeature").value;
+  if(!account||!product||!feature)throw new Error("حساب، محصول و قابلیت را انتخاب کنید.");
+  const toIso=id=>$(id).value?new Date($ (id).value).toISOString():null;
+  const limit=$("grantLimit").value===""?null:Number($("grantLimit").value);
+  const payload={product_key:product,feature_key:feature,source_type:$("grantSource").value,starts_at:toIso("grantStarts"),ends_at:toIso("grantEnds"),usage_limit:limit};
+  await api("/v1/admin/accounts/"+encodeURIComponent(account)+"/grants",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+  status("grantStatus",payload.ends_at?"مجوز زمان‌دار صادر شد.":"مجوز دائمی صادر شد.");
+  $("grantStarts").value="";$("grantEnds").value="";$("grantLimit").value="";
+  await loadAccountGrants();
+ }catch(e){status("grantStatus","صدور مجوز انجام نشد: "+e.message,true);}
+});
 $("save").addEventListener("click",async()=>{
  try{
   const product=$("product").value,key=$("featureKey").value.trim(),name=$("featureName").value.trim(),mode=$("accessMode").value;
