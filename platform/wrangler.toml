@@ -13,3 +13,14 @@ migrations_dir = "migrations"
 [vars]
 # Exact browser origins separated by commas. Native mobile clients do not need CORS.
 CORS_ALLOWED_ORIGINS = "https://sahroud.github.io"
+
+# Internal coordinator binding for local/runtime tests. No public Worker route uses this binding.
+[[durable_objects.bindings]]
+name = "OPERATION_COORDINATOR"
+class_name = "OperationCoordinatorDO"
+
+# SQLite-backed Durable Object class. This migration is only applied by local test/dev tooling;
+# no remote migration or deployment is authorized.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["OperationCoordinatorDO"]
