@@ -4,15 +4,20 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test",
+    "test": "node --test test/client.test.js test/firebase-auth.test.js test/index.test.js test/worker.test.js test/admission-state.test.js test/operation-coordinator.test.js test/operation-coordinator-do.test.js",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply sahroud-central --local",
     "db:migrate:remote": "wrangler d1 migrations apply sahroud-central --remote",
-    "db:migrations:remote": "wrangler d1 migrations list sahroud-central --remote"
+    "db:migrations:remote": "wrangler d1 migrations list sahroud-central --remote",
+    "test:schema": "python test/schema.test.py",
+    "test:all": "npm test && npm run test:schema && npm run test:d1",
+    "test:d1": "vitest run --config vitest.config.js"
   },
   "devDependencies": {
-    "wrangler": "^4.36.0"
+    "wrangler": "^4.36.0",
+    "@cloudflare/vitest-plugin": "^1.2.2",
+    "vitest": "^4.1.0"
   },
   "engines": {
     "node": ">=20"

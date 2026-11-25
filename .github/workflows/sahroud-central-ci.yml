@@ -16,6 +16,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: sahroud-central-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -30,13 +34,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Pin npm to a stable installer version
+        run: npm install --global npm@10.9.3
       - name: Install platform dependencies
-        run: npm install --ignore-scripts
+        run: npm install --ignore-scripts --no-audit --no-fund --legacy-peer-deps
       - name: Run API and authentication tests
         run: npm test
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Validate central D1 migration and constraints
+      - name: Validate central schema and concurrent usage enforcement with SQLite
         run: python test/schema.test.py
+      - name: Validate usage enforcement in Cloudflare Worker runtime with local D1
+        run: npm run test:d1

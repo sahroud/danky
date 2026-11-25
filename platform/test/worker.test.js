@@ -184,6 +184,6 @@ test("CORS advertises POST for Firebase authentication", async () => {
     }
   }), { CORS_ALLOWED_ORIGINS: "https://app.sahroud.example" });
   assert.equal(response.status, 204);
-  assert.equal(response.headers.get("access-control-allow-methods"), "GET, POST, OPTIONS");
-  assert.equal(response.headers.get("access-control-allow-headers"), "Content-Type, Authorization");
+  assert.equal(response.headers.get("access-control-allow-methods"), "GET, POST, PATCH, OPTIONS");
+  assert.equal(response.headers.get("access-control-allow-headers"), "Content-Type, Authorization, X-Sahroud-Account-Id");
 });
