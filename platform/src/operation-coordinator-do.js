@@ -52,6 +52,7 @@ async function verifyAssertion(token, secret, now, action) {
       !Number.isSafeInteger(payload.leaseSeconds) || payload.leaseSeconds < 1 ||
       !Number.isSafeInteger(payload.maxLifetimeSeconds) || payload.maxLifetimeSeconds < payload.leaseSeconds ||
       !Number.isSafeInteger(payload.queueLimit) || payload.queueLimit < 0 ||
+      !Number.isSafeInteger(payload.accountQueueLimit) || payload.accountQueueLimit < 0 ||
       !Number.isSafeInteger(payload.maxWaitSeconds) || payload.maxWaitSeconds < 0) {
     throw new Error("invalid_assertion_scope_or_policy");
   }
@@ -120,7 +121,7 @@ export class OperationCoordinatorDO {
       accountId: assertion.accountId, productKey: assertion.productKey,
       cap: assertion.cap, accountCap: assertion.accountCap, leaseSeconds: assertion.leaseSeconds,
       maxLifetimeSeconds: assertion.maxLifetimeSeconds,
-      queueLimit: assertion.queueLimit, maxWaitSeconds: assertion.maxWaitSeconds,
+      queueLimit: assertion.queueLimit, accountQueueLimit: assertion.accountQueueLimit, maxWaitSeconds: assertion.maxWaitSeconds,
       ...(action === "acquire" ? { requestId: assertion.requestId, leaseId: assertion.leaseId } : {}),
       ...((action === "heartbeat" || action === "release") ? { leaseId: assertion.leaseId } : {}),
       ...(action === "revoke" ? { leaseId: undefined } : {})
@@ -139,7 +140,8 @@ export class OperationCoordinatorDO {
           cap: assertion.cap,
           accountCap: assertion.accountCap,
           leaseSeconds: assertion.leaseSeconds,
-          maxLifetimeSeconds: assertion.maxLifetimeSeconds
+          maxLifetimeSeconds: assertion.maxLifetimeSeconds,
+          accountQueueLimit: assertion.accountQueueLimit
         });
         return outcome;
       });
