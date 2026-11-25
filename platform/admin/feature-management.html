@@ -170,7 +170,7 @@ async function searchAccounts(){
   for(const a of data.accounts||[]){const o=document.createElement("option");o.value=a.id;o.textContent=a.display_name+" · "+a.id;$("accountSelect").append(o);}
   if(!(data.accounts||[]).length){const o=document.createElement("option");o.value="";o.textContent="حسابی یافت نشد";$("accountSelect").append(o);}
   status("grantStatus",(data.accounts||[]).length+" حساب پیدا شد.");
-  if(data.accounts?.length)await loadAccountGrants();
+  if(data.accounts?.length){await loadAccountGrants();await loadAccountSubscriptions();}
  }catch(e){status("grantStatus","جست‌وجوی حساب ناموفق بود: "+e.message,true);}
 }
 async function loadGrantFeatures(){
@@ -248,7 +248,6 @@ $("createSubscription").addEventListener("click",async()=>{
  }catch(e){status("subscriptionStatus","صدور اشتراک انجام نشد: "+e.message,true);}
 });
 $("searchAccounts").addEventListener("click",searchAccounts);
-$("accountSelect").addEventListener("change",loadAccountGrants);
 $("grantProduct").addEventListener("change",loadGrantFeatures);
 $("refreshGrants").addEventListener("click",loadAccountGrants);
 $("createGrant").addEventListener("click",async()=>{
