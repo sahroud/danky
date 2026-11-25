@@ -377,6 +377,7 @@ test("admin account and grant management routes require Firebase authentication"
     ["/v1/admin/accounts/account-a/grants", "GET"],
     ["/v1/admin/accounts/account-a/grants", "POST"],
     ["/v1/admin/products/steel/plans", "GET"],
+    ["/v1/admin/products/steel/plans/pro", "PATCH"],
     ["/v1/admin/accounts/account-a/subscriptions", "GET"],
     ["/v1/admin/accounts/account-a/subscriptions", "POST"],
     ["/v1/admin/subscriptions/sub-1", "PATCH"],
