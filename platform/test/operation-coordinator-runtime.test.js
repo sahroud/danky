@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
+import { runInDurableObject, runDurableObjectAlarm } from "cloudflare:test";
 import { signCoordinatorAssertion } from "../src/operation-coordinator-do.js";
 
 const secret = "local-test-secret-not-for-production-000000000000";
@@ -78,4 +79,28 @@ describe("Durable Object coordinator in Cloudflare runtime", () => {
     expect(promoted.status).toBe("granted");
     expect(promoted.lease.leaseId).toBe("lb");
   });
+  it("expires leases and promotes the FIFO queue from a scheduled alarm", async () => {
+    const object = stub("alarm-cleanup");
+    const policy = { cap: 1, queueLimit: 2, leaseSeconds: 60, maxLifetimeSeconds: 180 };
+    const first = await token("acquire", { requestId: "alarm-a", leaseId: "alarm-la" }, policy);
+    const waiting = await token("acquire", { requestId: "alarm-b", leaseId: "alarm-lb" }, policy);
+    expect((await (await call(object, "acquire", first)).json()).status).toBe("granted");
+    expect((await (await call(object, "acquire", waiting)).json()).status).toBe("queued");
+
+    await runInDurableObject(object, async (_instance, state) => {
+      const stored = await state.storage.get("coordinator-state");
+      stored.leases["alarm-la"].expiresAt = Math.floor(Date.now() / 1000) - 1;
+      await state.storage.put("coordinator-state", stored);
+      await state.storage.setAlarm(Date.now() + 60_000);
+    });
+
+    expect(await runDurableObjectAlarm(object)).toBe(true);
+    const promoted = await (await call(object, "acquire", waiting)).json();
+    expect(promoted).toMatchObject({ status: "granted", lease: { leaseId: "alarm-lb" }, idempotent: true });
+
+    const nextAlarm = await runInDurableObject(object, (_instance, state) => state.storage.getAlarm());
+    expect(nextAlarm).not.toBeNull();
+    expect(nextAlarm).toBeGreaterThan(Date.now());
+  });
+
 });
