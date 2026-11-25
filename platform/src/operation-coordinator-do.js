@@ -88,7 +88,8 @@ export class OperationCoordinatorDO {
       maxLifetimeSeconds: assertion.maxLifetimeSeconds,
       queueLimit: assertion.queueLimit, maxWaitSeconds: assertion.maxWaitSeconds,
       ...(action === "acquire" ? { requestId: assertion.requestId, leaseId: assertion.leaseId } : {}),
-      ...((action === "heartbeat" || action === "release") ? { leaseId: assertion.leaseId } : {})
+      ...((action === "heartbeat" || action === "release") ? { leaseId: assertion.leaseId } : {}),
+      ...(action === "revoke" ? { leaseId: undefined } : {})
     };
     try {
       const result = await this.ctx.storage.transaction(async transaction => {
