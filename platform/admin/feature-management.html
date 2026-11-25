@@ -79,6 +79,17 @@ button.secondary{background:#21465b;color:#effaff;border:1px solid #3a6278}butto
 <div class="status" id="subscriptionStatus" role="status">ابتدا حساب کاربری را در بخش مجوزها انتخاب کنید.</div>
 <div id="subscriptionList" style="margin-top:12px"></div>
 </section>
+
+<section class="panel hidden" id="plansPanel">
+<h2>۶. تعریف طرح‌های اشتراک</h2>
+<div class="grid">
+<div><label for="planCode">کد طرح (انگلیسی)</label><input id="planCode" placeholder="مثلاً pro-yearly"></div>
+<div><label for="planName">نام نمایشی طرح</label><input id="planName" placeholder="مثلاً حرفه‌ای سالانه"></div>
+<div class="wide"><label for="planFeatureKeys">قابلیت‌های پولی این طرح (برای انتخاب چند مورد، چندتایی انتخاب کنید)</label><select id="planFeatureKeys" multiple size="6"></select></div>
+</div>
+<div class="actions"><button id="savePlan">ذخیره طرح و قابلیت‌ها</button></div>
+<div class="muted">محصول از بخش اشتراک انتخاب می‌شود. فقط قابلیت‌های پولی و فعال قابل افزودن هستند. با ذخیره دوبارهٔ همان کد، ترکیب قابلیت‌ها به‌روزرسانی می‌شود.</div>
+</section>
 <section class="panel hidden" id="editor">
 <h2>۳. تعریف یا ویرایش قابلیت</h2>
 <div class="grid">
@@ -133,6 +144,15 @@ async function loadFeatures(){
 }
 
 
+
+async function loadPlanFeatureChoices(){
+ try{
+  const product=$("subscriptionProduct").value;if(!product)return;
+  const data=await api("/v1/admin/products/"+encodeURIComponent(product)+"/features");
+  $("planFeatureKeys").replaceChildren();
+  for(const f of data.features||[]){if(!f.enabled||f.access_mode!=="paid")continue;const o=document.createElement("option");o.value=f.key;o.textContent=f.name+" · "+f.key;$("planFeatureKeys").append(o);}
+ }catch(e){status("subscriptionStatus","دریافت قابلیت‌های طرح ناموفق بود: "+e.message,true);}
+}
 async function loadSubscriptionPlans(){
  try{
   const product=$("subscriptionProduct").value;if(!product)return;
@@ -221,20 +241,31 @@ $("login").addEventListener("click",async()=>{
   products=(await catalog.json()).products||[];
   $("product").replaceChildren();
   for(const p of products){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("product").append(o);}
-  $("workspace").classList.remove("hidden");$("editor").classList.remove("hidden");$("grantsPanel").classList.remove("hidden");$("subscriptionsPanel").classList.remove("hidden");$("logout").disabled=false;$("login").disabled=true;
-  $("grantProduct").replaceChildren();for(const p of products){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("grantProduct").append(o);}await loadGrantFeatures();$("subscriptionProduct").replaceChildren();for(const p of products){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("subscriptionProduct").append(o);}await loadSubscriptionPlans();
+  $("workspace").classList.remove("hidden");$("editor").classList.remove("hidden");$("grantsPanel").classList.remove("hidden");$("subscriptionsPanel").classList.remove("hidden");$("plansPanel").classList.remove("hidden");$("logout").disabled=false;$("login").disabled=true;
+  $("grantProduct").replaceChildren();for(const p of products){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("grantProduct").append(o);}await loadGrantFeatures();$("subscriptionProduct").replaceChildren();for(const p of products){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("subscriptionProduct").append(o);}await loadSubscriptionPlans();await loadPlanFeatureChoices();
   status("authStatus","ورود Firebase انجام شد: "+user.email+"\nاکنون دسترسی مدیر از API مرکزی بررسی می‌شود.");
   await loadFeatures();
  }catch(e){status("authStatus","ورود یا بررسی دسترسی مدیر ناموفق بود: "+e.message,true);}
 });
-$("logout").addEventListener("click",async()=>{try{if(auth)await auth.signOut();}finally{auth=null;user=null;token=null;$("workspace").classList.add("hidden");$("editor").classList.add("hidden");$("grantsPanel").classList.add("hidden");$("subscriptionsPanel").classList.add("hidden");$("logout").disabled=true;$("login").disabled=false;status("authStatus","از حساب خارج شدید.");}});
+$("logout").addEventListener("click",async()=>{try{if(auth)await auth.signOut();}finally{auth=null;user=null;token=null;$("workspace").classList.add("hidden");$("editor").classList.add("hidden");$("grantsPanel").classList.add("hidden");$("subscriptionsPanel").classList.add("hidden");$("plansPanel").classList.add("hidden");$("logout").disabled=true;$("login").disabled=false;status("authStatus","از حساب خارج شدید.");}});
 $("product").addEventListener("change",loadFeatures);
 $("newFeature").addEventListener("click",()=>{resetForm();status("saveStatus","فرم برای تعریف قابلیت جدید آماده است.");});
 
 
-$("subscriptionProduct").addEventListener("change",loadSubscriptionPlans);
+$("subscriptionProduct").addEventListener("change",async()=>{await loadSubscriptionPlans();await loadPlanFeatureChoices();});
 $("refreshSubscriptions").addEventListener("click",loadAccountSubscriptions);
 $("accountSelect").addEventListener("change",()=>{loadAccountGrants();loadAccountSubscriptions();});
+
+$("savePlan").addEventListener("click",async()=>{
+ try{
+  const product=$("subscriptionProduct").value,plan_code=$("planCode").value.trim(),display_name=$("planName").value.trim();
+  const feature_keys=Array.from($("planFeatureKeys").selectedOptions).map(o=>o.value);
+  if(!product||!plan_code||!display_name||!feature_keys.length)throw new Error("محصول، کد، نام و دست‌کم یک قابلیت را انتخاب کنید.");
+  await api("/v1/admin/products/"+encodeURIComponent(product)+"/plans",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({plan_code,display_name,feature_keys,is_active:true})});
+  status("subscriptionStatus","طرح اشتراک ذخیره شد.");$("planCode").value="";$("planName").value="";
+  await loadSubscriptionPlans();
+ }catch(e){status("subscriptionStatus","ذخیره طرح ناموفق بود: "+e.message,true);}
+});
 $("createSubscription").addEventListener("click",async()=>{
  try{
   const account=$("accountSelect").value,product=$("subscriptionProduct").value,plan=$("subscriptionPlan").value;
