@@ -502,7 +502,7 @@ test("Worker operation admission enforces shared product and per-account limits"
     OPERATION_ASSERTION_SECRET: secret,
     OPERATION_COORDINATOR: {
       idFromName(name) { names.push(name); return name; },
-      get(id) { assert.equal(id, "steel"); return object; }
+      get(id) { assert.equal(id, "steel"); return { fetch(url, init) { return object.fetch(new Request(url, init)); } }; }
     }
   });
   const acquire = (accountId, requestId) => coordinateOperationForIdentity(
