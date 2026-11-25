@@ -142,7 +142,10 @@ class MainActivity : Activity() {
 
     private val locationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == LocationTrackingService.ACTION_LOCATION_UPDATE) restoreRouteDisplay()
+            if (intent?.action == LocationTrackingService.ACTION_LOCATION_UPDATE) {
+                restoreRouteDisplay()
+                refreshFamilyStatus()
+            }
             if (intent?.action == StepCounterService.ACTION_STEPS_UPDATE) refreshStepsText()
         }
     }
@@ -470,6 +473,7 @@ class MainActivity : Activity() {
             else registerReceiver(locationReceiver, filter)
         } catch (_: Exception) {}
         restoreRouteDisplay()
+        refreshFamilyStatus()
         refreshStepsText()
     }
 
