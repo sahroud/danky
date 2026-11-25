@@ -13,9 +13,20 @@ const request = (path, body, headers = {}) => new Request("https://central.test"
 const call = (req, resource, action) => handleDeviceSession(req, { CORE_DB: env.CORE_DB }, identity, productKey, resource, action);
 const deviceId = i => "install-" + String(i).padStart(4, "0");
 const execStatements = async sql => {
-  for (const statement of sql.split(";").map(value => value.trim()).filter(Boolean)) {
-    await env.CORE_DB.exec(statement);
+  const statements = [];
+  let start = 0, depth = 0;
+  for (let i = 0; i < sql.length; i++) {
+    if (sql[i] === "(") depth++;
+    else if (sql[i] === ")") depth--;
+    else if (sql[i] === ";" && depth === 0) {
+      const statement = sql.slice(start, i).trim();
+      if (statement) statements.push(statement);
+      start = i + 1;
+    }
   }
+  const tail = sql.slice(start).trim();
+  if (tail) statements.push(tail);
+  for (const statement of statements) await env.CORE_DB.exec(statement);
 };
 
 describe("D1 device and session lifecycle concurrency", () => {
