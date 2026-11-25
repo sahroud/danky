@@ -1,0 +1,29 @@
+name: SAHROUD FAMILY GUARD API tests
+
+on:
+  push:
+    paths:
+      - "family-guard/server/**"
+      - ".github/workflows/family-guard-ci.yml"
+  pull_request:
+    paths:
+      - "family-guard/server/**"
+      - ".github/workflows/family-guard-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run Family Guard API tests
+        working-directory: family-guard/server
+        run: npm test
