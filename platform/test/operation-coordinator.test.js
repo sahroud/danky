@@ -57,3 +57,26 @@ test("release is idempotent and revoke can target an account/product scope", () 
   acquire(state, request("two"));
   assert.equal(revoke(state, { ...policy, now: 103, accountId: "acct-a", productKey: "steel" }).count, 1);
 });
+
+test("idempotency keys are scoped to account and product", () => {
+  const state = emptyCoordinatorState();
+  const first = acquire(state, { ...request("same"), cap: 2 });
+  const second = acquire(state, { ...request("same", "acct-b"), cap: 2, leaseId: "lease-acct-b" });
+  assert.equal(first.status, "granted");
+  assert.equal(second.status, "granted");
+  assert.notEqual(first.lease.requestKey, second.lease.requestKey);
+});
+
+test("lease IDs cannot overwrite an existing active or queued lease", () => {
+  const state = emptyCoordinatorState();
+  assert.equal(acquire(state, request("one")).status, "granted");
+  const collision = acquire(state, { ...request("two"), leaseId: "lease-one" });
+  assert.deepEqual(collision, { status: "denied", reason: "lease_id_conflict" });
+});
+
+test("invalid policy and malformed requests fail closed", () => {
+  const state = emptyCoordinatorState();
+  assert.equal(acquire(state, { ...request("bad"), cap: 0 }).reason, "invalid_request_or_policy");
+  assert.equal(acquire(state, { ...request("bad2"), maxLifetimeSeconds: 1 }).reason, "invalid_request_or_policy");
+  assert.equal(acquire(state, { ...request("bad3"), accountId: "" }).reason, "invalid_request_or_policy");
+});
