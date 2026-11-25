@@ -24,7 +24,8 @@ test("account overrides tighten caps while product and account caps stay distinc
   assert.equal(policy.maxSessionsPerAccount, 1);
   assert.equal(policy.productConcurrentCap, 10);
   assert.equal(policy.accountConcurrentCap, 4);
-  assert.equal(policy.maxQueuedOperations, 5);
+  assert.equal(policy.productQueueLimit, 20);
+  assert.equal(policy.accountQueueLimit, 5);
 });
 
 test("null account overrides inherit product ceilings", () => {
@@ -40,14 +41,16 @@ test("null account overrides inherit product ceilings", () => {
   assert.equal(policy.maxSessionsPerAccount, 3);
   assert.equal(policy.productConcurrentCap, 10);
   assert.equal(policy.accountConcurrentCap, 10);
-  assert.equal(policy.maxQueuedOperations, 20);
+  assert.equal(policy.productQueueLimit, 20);
+  assert.equal(policy.accountQueueLimit, 20);
   assert.equal(policy.sessionLeaseSeconds, 300);
   assert.equal(policy.operationLeaseSeconds, 300);
 });
 
 test("null product queue limit defaults to zero queued work", () => {
   const policy = resolveEffectiveRuntimePolicy({ ...product, max_queued_operations: null }, null);
-  assert.equal(policy.maxQueuedOperations, 0);
+  assert.equal(policy.productQueueLimit, 0);
+  assert.equal(policy.accountQueueLimit, 0);
 });
 
 test("missing product operation cap fails closed", () => {
