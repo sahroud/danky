@@ -379,9 +379,11 @@ test("admin account and grant management routes require Firebase authentication"
     ["/v1/admin/grants/grant-1", "PATCH"]
   ];
   for (const [path, method] of cases) {
-    const response = await handle(request(path, { method }), { FIREBASE_PROJECT_ID: "sahroud-central-test" });
-    assert.equal(response.status, 401, path + " " + method);
-    assert.equal((await response.json()).error, "authentication_required");
+    await assert.rejects(
+      handle(request(path, { method }), { FIREBASE_PROJECT_ID: "sahroud-central-test" }),
+      /authentication_required/,
+      path + " " + method
+    );
   }
 });
 
