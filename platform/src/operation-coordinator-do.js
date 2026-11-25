@@ -64,6 +64,39 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), {
 export class OperationCoordinatorDO {
   constructor(ctx, env) { this.ctx = ctx; this.env = env; }
 
+  async refreshAlarm() {
+    const state = await this.ctx.storage.get("coordinator-state") || emptyCoordinatorState();
+    const deadlines = [
+      ...Object.values(state.leases).map(lease => lease.expiresAt),
+      ...Object.values(state.queue).flatMap(entry => [entry.expiresAt, entry.maxExpiresAt])
+    ].filter(Number.isSafeInteger);
+    if (deadlines.length === 0) {
+      await this.ctx.storage.deleteAlarm();
+      return;
+    }
+    const nextAlarm = Math.max(Date.now() + 1, Math.min(...deadlines) * 1000);
+    const currentAlarm = await this.ctx.storage.getAlarm();
+    // Keeping an earlier alarm is safe: it will re-check state and schedule the next deadline.
+    if (currentAlarm === null || nextAlarm < currentAlarm) {
+      await this.ctx.storage.setAlarm(nextAlarm);
+    }
+  }
+
+  async alarm() {
+    const policy = await this.ctx.storage.get("coordinator-policy");
+    if (!policy) {
+      await this.ctx.storage.deleteAlarm();
+      return;
+    }
+    const now = Math.floor(Date.now() / 1000);
+    await this.ctx.storage.transaction(async transaction => {
+      const state = await transaction.get("coordinator-state") || emptyCoordinatorState();
+      expireAndPromote(state, { ...policy, now });
+      await transaction.put("coordinator-state", state);
+    });
+    await this.refreshAlarm();
+  }
+
   async fetch(request) {
     if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
     let body;
@@ -101,8 +134,14 @@ export class OperationCoordinatorDO {
         else if (action === "revoke") outcome = revoke(state, input);
         else outcome = expireAndPromote(state, input);
         await transaction.put("coordinator-state", state);
+        await transaction.put("coordinator-policy", {
+          cap: assertion.cap,
+          leaseSeconds: assertion.leaseSeconds,
+          maxLifetimeSeconds: assertion.maxLifetimeSeconds
+        });
         return outcome;
       });
+      await this.refreshAlarm();
       return json(result);
     } catch {
       return json({ error: "coordinator_storage_unavailable" }, 503);
