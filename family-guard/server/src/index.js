@@ -50,7 +50,7 @@ async function deviceAuth(request, env) {
   ).bind(await hash(token)).first();
 }
 
-async function handle(request, env) {
+export async function handle(request, env) {
   const url = new URL(request.url);
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders(request, env) });
