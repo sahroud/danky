@@ -21,7 +21,7 @@ Plan-level limits remain in `plans.limits_json`; the future policy resolver must
 
 ## Concurrency correctness
 
-Do not enforce session or operation caps with a D1 `SELECT COUNT(*)` followed by an `INSERT`: simultaneous requests can both observe a free slot and exceed the cap. Use a Cloudflare Durable Object as the serialized coordinator, partitioned by product and (for account session admission) account/product. It should issue opaque lease/permit IDs, store expiries, support heartbeat/release/revoke, and reclaim expired records. The Worker authenticates the account and checks central entitlement before asking the coordinator. D1 remains the source for policy configuration and audit metadata, not the distributed lock.
+Do not enforce session or operation caps with a D1 `SELECT COUNT(*)` followed by an `INSERT`: simultaneous requests can both observe a free slot and exceed the cap. Use a product-scoped Cloudflare Durable Object as the serialized coordinator for heavy operations. It issues opaque lease/permit IDs, stores expiries, supports heartbeat/release/revoke, and reclaims expired records. The product-wide operation cap and per-account cap are independent; queue depth is likewise bounded separately at product and account scope. Registered-device and session admission are separate lifecycles and are not implemented by the operation coordinator. The Worker authenticates the account and checks central entitlement before asking the coordinator. D1 remains the source for policy configuration and audit metadata, not the distributed lock.
 
 A permit must be released in a `finally` path by the trusted product backend. Long-running jobs need heartbeat/renewal and a maximum lease lifetime. Client disconnects must not permanently consume capacity.
 
@@ -37,8 +37,8 @@ A permit must be released in a `finally` path by the trusted product backend. Lo
 ## Implementation still required
 
 - Authenticated policy read/admin write APIs and Persian admin controls.
-- Durable Object coordinator, binding, namespace migration, and local tests for simultaneous admission, expiry, heartbeat, release, revocation, queue overflow, and fairness.
-- Product backend adapters for STEEL, UTM, TASBIH, and other products, each enforcing its own workload semantics.
+- Device registration and authenticated session lifecycle, with atomic per-account caps and lease expiry.
+- Product backend adapters for STEEL, UTM, TASBIH, and other products, each enforcing its own workload semantics and releasing permits in finally.
 - Capacity metrics and load tests before enabling caps for paying customers.
 
 Migration 0006 is schema-only until those pieces are implemented and deployed with explicit approval. Do not run a remote migration or deploy from this change.
