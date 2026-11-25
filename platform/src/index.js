@@ -348,7 +348,7 @@ async function adminRuntimePolicy(request, env, productKey) {
   const pos = v => v === null ? null : Number.isSafeInteger(v) && v >= 1 && v <= 100000 ? v : undefined;
   const devices=pos(body?.max_devices_per_account), sessions=pos(body?.max_sessions_per_account), operations=pos(body?.max_concurrent_operations);
   const lease=body?.session_lease_seconds, queue=body?.max_queued_operations, wait=body?.queue_wait_seconds;
-  if (devices===undefined || sessions===undefined || operations===undefined || !Number.isInteger(lease) || lease<30 || lease>86400 || !Number.isSafeInteger(queue) || queue<0 || queue>100000 || !Number.isInteger(wait) || wait<0 || wait>86400 || (sessions!==null && devices!==null && sessions>devices)) return json({error:"invalid_runtime_policy"},400);
+  if (devices===undefined || sessions===undefined || operations===undefined || !Number.isInteger(lease) || lease<30 || lease>86400 || !Number.isSafeInteger(queue) || queue<0 || queue>100000 || !Number.isInteger(wait) || wait<0 || wait>86400) return json({error:"invalid_runtime_policy"},400);
   const now=new Date().toISOString();
   await env.CORE_DB.batch([
     env.CORE_DB.prepare("INSERT INTO product_runtime_policies (product_key,max_devices_per_account,max_sessions_per_account,session_lease_seconds,max_concurrent_operations,max_queued_operations,queue_wait_seconds,updated_at,updated_by) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(product_key) DO UPDATE SET max_devices_per_account=excluded.max_devices_per_account,max_sessions_per_account=excluded.max_sessions_per_account,session_lease_seconds=excluded.session_lease_seconds,max_concurrent_operations=excluded.max_concurrent_operations,max_queued_operations=excluded.max_queued_operations,queue_wait_seconds=excluded.queue_wait_seconds,updated_at=excluded.updated_at,updated_by=excluded.updated_by").bind(productKey,devices,sessions,lease,operations,queue,wait,now,identity.subject),
@@ -373,7 +373,7 @@ async function adminAccountRuntimePolicy(request, env, accountId, productKey) {
   const pos=v=>v===null?null:Number.isSafeInteger(v)&&v>=1&&v<=100000?v:undefined;
   const qv=v=>v===null?null:Number.isSafeInteger(v)&&v>=0&&v<=100000?v:undefined;
   const devices=pos(body?.max_devices_per_account),sessions=pos(body?.max_sessions_per_account),operations=pos(body?.max_concurrent_operations),queue=qv(body?.max_queued_operations);
-  if(devices===undefined||sessions===undefined||operations===undefined||queue===undefined||(sessions!==null&&devices!==null&&sessions>devices))return json({error:"invalid_runtime_policy_override"},400);
+  if(devices===undefined||sessions===undefined||operations===undefined||queue===undefined)return json({error:"invalid_runtime_policy_override"},400);
   const now=new Date().toISOString();
   await env.CORE_DB.batch([
     env.CORE_DB.prepare("INSERT INTO account_product_policy_overrides (account_id,product_key,max_devices_per_account,max_sessions_per_account,max_concurrent_operations,max_queued_operations,updated_at,updated_by) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(account_id,product_key) DO UPDATE SET max_devices_per_account=excluded.max_devices_per_account,max_sessions_per_account=excluded.max_sessions_per_account,max_concurrent_operations=excluded.max_concurrent_operations,max_queued_operations=excluded.max_queued_operations,updated_at=excluded.updated_at,updated_by=excluded.updated_by").bind(accountId,productKey,devices,sessions,operations,queue,now,identity.subject),
