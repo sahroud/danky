@@ -174,3 +174,47 @@ export async function handleDeviceSession(request, env, identity, productKey, re
 
   return json({ error: "not_found" }, 404);
 }
+
+
+/** Central-admin view and revocation; never returns session token hashes. */
+export async function handleAdminDeviceSessions(request, env, identity, accountId, productKey, resource, action, resourceId = null) {
+  const admins = String(env?.CENTRAL_ADMIN_UIDS || "").split(",").map(value => value.trim()).filter(Boolean);
+  if (!identity?.subject || !admins.includes(identity.subject)) return json({ error: "central_admin_required" }, 403);
+  if (!env?.CORE_DB) return json({ error: "core_database_not_configured" }, 503);
+  if (typeof accountId !== "string" || !accountId || accountId.length > 128 || !validProduct(productKey)) {
+    return json({ error: "invalid_account_or_product" }, 400);
+  }
+  const account = await env.CORE_DB.prepare("SELECT id FROM accounts WHERE id=?").bind(accountId).first();
+  if (!account) return json({ error: "account_not_found" }, 404);
+  const product = await env.CORE_DB.prepare("SELECT product_key FROM products WHERE product_key=? AND lifecycle_status<>'retired'").bind(productKey).first();
+  if (!product) return json({ error: "product_not_found" }, 404);
+  const now = nowIso();
+  if (resource === "sessions" && action === "list" && request.method === "GET") {
+    await expireStaleSessions(env.CORE_DB, accountId, productKey, now);
+    const [devices, sessions] = await Promise.all([
+      env.CORE_DB.prepare(
+        "SELECT device_id,device_label,platform,status,first_seen_at,last_seen_at,revoked_at FROM account_product_devices WHERE account_id=? AND product_key=? ORDER BY last_seen_at DESC"
+      ).bind(accountId, productKey).all(),
+      env.CORE_DB.prepare(
+        "SELECT session_id,principal_id,device_id,status,issued_at,expires_at,last_seen_at,revoked_at FROM account_product_sessions WHERE account_id=? AND product_key=? ORDER BY issued_at DESC"
+      ).bind(accountId, productKey).all()
+    ]);
+    return json({ account_id: accountId, product_key: productKey, devices: devices.results || [], sessions: sessions.results || [] });
+  }
+  if (resource === "sessions" && action === "revoke" && request.method === "POST") {
+    if (typeof resourceId !== "string" || !resourceId || resourceId.length > 128) return json({ error: "valid_session_id_required" }, 400);
+    const result = await env.CORE_DB.prepare(
+      "UPDATE account_product_sessions SET status='revoked',revoked_at=?,updated_at=? WHERE account_id=? AND product_key=? AND session_id=? AND status='active' RETURNING session_id"
+    ).bind(now, now, accountId, productKey, resourceId).first();
+    return json({ revoked: Boolean(result), session_id: result?.session_id || resourceId });
+  }
+  if (resource === "devices" && action === "revoke" && request.method === "POST") {
+    if (!validDeviceId(resourceId)) return json({ error: "valid_device_id_required" }, 400);
+    await env.CORE_DB.batch([
+      env.CORE_DB.prepare("UPDATE account_product_devices SET status='revoked',revoked_at=?,updated_at=? WHERE account_id=? AND product_key=? AND device_id=? AND status='active'").bind(now, now, accountId, productKey, resourceId),
+      env.CORE_DB.prepare("UPDATE account_product_sessions SET status='revoked',revoked_at=?,updated_at=? WHERE account_id=? AND product_key=? AND device_id=? AND status='active'").bind(now, now, accountId, productKey, resourceId)
+    ]);
+    return json({ revoked: true, device_id: resourceId });
+  }
+  return json({ error: "not_found" }, 404);
+}
