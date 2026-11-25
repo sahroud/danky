@@ -36,6 +36,8 @@ required = {
     "payment_webhook_events",
     "product_runtime_policies",
     "account_product_policy_overrides",
+    "account_product_devices",
+    "account_product_sessions",
 }
 assert required.issubset(tables), f"Missing tables: {required - tables}"
 
@@ -245,6 +247,58 @@ except sqlite3.IntegrityError:
     pass
 else:
     raise AssertionError("Invalid device limit or lease duration was accepted")
+
+# Product device identities and session leases are isolated by account and product.
+connection.execute(
+    "INSERT INTO account_product_devices "
+    "(account_id, product_key, device_id, device_label, platform, status, "
+    "first_seen_at, last_seen_at, created_at, updated_at) "
+    "VALUES ('a1', 'steel', 'device-install-001', 'Android phone', 'android', "
+    "'active', 'now', 'now', 'now', 'now')"
+)
+connection.execute(
+    "INSERT INTO account_product_sessions "
+    "(session_id, account_id, product_key, principal_id, device_id, token_hash, "
+    "status, issued_at, expires_at, last_seen_at, created_at, updated_at) "
+    "VALUES ('sess-1', 'a1', 'steel', 'p1', 'device-install-001', "
+    "'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', "
+    "'active', 'now', 'later', 'now', 'now', 'now')"
+)
+try:
+    connection.execute(
+        "INSERT INTO account_product_sessions "
+        "(session_id, account_id, product_key, principal_id, device_id, token_hash, "
+        "status, issued_at, expires_at, last_seen_at, created_at, updated_at) "
+        "VALUES ('sess-2', 'a1', 'steel', 'p1', 'device-install-001', "
+        "'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', "
+        "'active', 'now', 'later', 'now', 'now', 'now')"
+    )
+except sqlite3.IntegrityError:
+    pass
+else:
+    raise AssertionError("Duplicate session token hash was accepted")
+
+try:
+    connection.execute(
+        "INSERT INTO account_product_sessions "
+        "(session_id, account_id, product_key, principal_id, device_id, token_hash, "
+        "status, issued_at, expires_at, last_seen_at, created_at, updated_at) "
+        "VALUES ('sess-3', 'a1', 'steel', 'p1', 'unknown-device', "
+        "'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', "
+        "'active', 'now', 'later', 'now', 'now', 'now')"
+    )
+except sqlite3.IntegrityError:
+    pass
+else:
+    raise AssertionError("Session without a registered account/product device was accepted")
+
+stored_session = connection.execute(
+    "SELECT account_id, product_key, device_id, status FROM account_product_sessions "
+    "WHERE session_id='sess-1'"
+).fetchone()
+assert stored_session == ('a1', 'steel', 'device-install-001', 'active'), (
+    f"Unexpected product session scope: {stored_session}"
+)
 
 print("SAHROUD Central schema tests passed")
 
