@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#102b3f">
+<title>مدیریت قابلیت‌ها | SAHROUD CENTRAL</title>
+<style>
+:root{color-scheme:dark;--bg:#081725;--panel:#10283a;--line:#29495d;--text:#f3f8fb;--muted:#a9c0ce;--accent:#55d6be;--danger:#ff9c9c}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(160deg,#071522,#0d2435 55%,#081725);color:var(--text);font:14px Tahoma,Arial,sans-serif}
+main{width:min(920px,100%);margin:auto;padding:18px 14px 42px}header{padding:14px 4px 20px}h1{font-size:21px;margin:0 0 8px}h2{font-size:16px;margin:0 0 14px}.muted{color:var(--muted);font-size:12px;line-height:1.9}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.wide{grid-column:1/-1}
+label{display:block;font-size:12px;color:#c8dbe5;margin:0 0 6px}
+input,select,textarea{width:100%;padding:11px;border:1px solid #3b5b6e;border-radius:10px;background:#091d2c;color:var(--text);font:13px Tahoma}
+input[type=checkbox]{width:auto;accent-color:var(--accent);transform:scale(1.2)}
+button{border:0;border-radius:11px;padding:12px 16px;background:var(--accent);color:#092b32;font:bold 13px Tahoma;cursor:pointer}
+button.secondary{background:#21465b;color:#effaff;border:1px solid #3a6278}button:disabled{opacity:.5;cursor:not-allowed}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.status{padding:10px 12px;border-radius:10px;background:#17394b;color:#d9f5ef;font-size:12px;line-height:1.8;margin-top:10px;white-space:pre-wrap}.status.error{background:#4a252b;color:#ffe1e1}
+.feature{border:1px solid var(--line);border-radius:12px;padding:13px;margin:9px 0;background:#0b2030}.feature strong{display:block;margin-bottom:6px}.pill{display:inline-block;background:#21485a;border-radius:30px;padding:4px 9px;font-size:11px;color:#d9f5ef;margin:3px}
+.hidden{display:none!important}.checkline{display:flex;align-items:center;gap:9px;padding:8px 0}
+@media(max-width:560px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}main{padding-inline:11px}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<h1>مدیریت قابلیت‌های SAHROUD</h1>
+<div class="muted">تنظیم دسترسی رایگان، پولی یا غیرفعال برای هر قابلیت. تغییرات فقط پس از تأیید سرور مرکزی ذخیره می‌شوند.</div>
+</header>
+
+<section class="panel" id="setup">
+<h2>۱. اتصال به حساب مدیریت</h2>
+<div class="muted">تنظیمات عمومی Web App فایربیس را وارد کنید. این مقادیر محرمانه نیستند؛ هیچ کلید خصوصی یا Service Account وارد نکنید. دامنه این صفحه باید در Firebase Authorized domains ثبت شده باشد.</div>
+<div class="grid" style="margin-top:12px">
+<div><label for="apiKey">Firebase Web API Key</label><input id="apiKey" autocomplete="off"></div>
+<div><label for="authDomain">Firebase Auth Domain</label><input id="authDomain" placeholder="project.firebaseapp.com"></div>
+<div><label for="projectId">Firebase Project ID</label><input id="projectId" autocomplete="off"></div>
+<div><label for="appId">Firebase App ID</label><input id="appId" autocomplete="off"></div>
+</div>
+<div class="actions"><button id="login">ورود مدیر با Google</button><button class="secondary" id="logout" disabled>خروج</button></div>
+<div class="status" id="authStatus" role="status">هنوز وارد نشده‌اید. برای ورود، تنظیمات پروژه Firebase را وارد کنید.</div>
+</section>
+
+<section class="panel hidden" id="workspace">
+<h2>۲. انتخاب محصول</h2>
+<div class="grid">
+<div class="wide"><label for="product">محصول</label><select id="product"><option value="">در حال دریافت فهرست محصولات…</option></select></div>
+</div>
+<div class="muted">پس از انتخاب محصول، قابلیت‌های ثبت‌شده نمایش داده می‌شوند. برای افزودن قابلیت جدید، کلید یکتای انگلیسی تعریف کنید.</div>
+<div id="features" style="margin-top:12px"></div>
+</section>
+
+<section class="panel hidden" id="editor">
+<h2>۳. تعریف یا ویرایش قابلیت</h2>
+<div class="grid">
+<div><label for="featureKey">کلید یکتا (انگلیسی)</label><input id="featureKey" placeholder="مثلاً dxf-export" pattern="[a-z0-9][a-z0-9._-]{1,80}"></div>
+<div><label for="featureName">نام نمایشی</label><input id="featureName" placeholder="مثلاً خروجی DXF"></div>
+<div class="wide"><label for="description">توضیحات</label><input id="description" maxlength="1000"></div>
+<div><label for="accessMode">نوع دسترسی</label><select id="accessMode"><option value="free">رایگان</option><option value="paid">پولی</option><option value="disabled">غیرفعال</option></select></div>
+<div><label for="price">قیمت (عدد صحیح به واحد پول انتخابی)</label><input id="price" type="number" min="0" step="1" placeholder="خالی = بدون قیمت ثبت‌شده"></div>
+<div><label for="currency">واحد پول</label><input id="currency" value="IRR" maxlength="8"></div>
+<div><label for="trialDays">مهلت آزمایشی (روز)</label><input id="trialDays" type="number" min="0" max="365" value="0"></div>
+<div><label for="usageLimit">سقف تعداد استفاده (خالی = نامحدود)</label><input id="usageLimit" type="number" min="0" step="1"></div>
+<div class="wide checkline"><input id="enabled" type="checkbox" checked><label for="enabled" style="margin:0">قابلیت از نظر مدیریتی فعال باشد</label></div>
+</div>
+<div class="muted">تاریخ شروع/پایان مجوز کاربر و اشتراک زمان‌دار در بخش صدور مجوز/اشتراک مدیریت می‌شود؛ این فرم تنظیمات خود قابلیت را ذخیره می‌کند.</div>
+<div class="actions"><button id="save">ذخیره در سرور مرکزی</button><button class="secondary" id="newFeature">پاک‌کردن فرم برای قابلیت جدید</button></div>
+<div class="status" id="saveStatus" role="status">برای ویرایش، یک قابلیت از فهرست انتخاب کنید یا کلید قابلیت جدید را وارد کنید.</div>
+</section>
+</main>
+
+<script type="module">
+const API="https://sahroud-central-api.sahroud.workers.dev";
+const $=id=>document.getElementById(id);
+let auth=null, user=null, token=null, products=[];
+const status=(id,message,error=false)=>{$(id).textContent=message;$(id).classList.toggle("error",error)};
+async function api(path,options={}){
+ if(!token)throw new Error("ابتدا با حساب Google وارد شوید.");
+ const response=await fetch(API+path,{...options,headers:{Accept:"application/json",Authorization:"Bearer "+token,...(options.headers||{})},cache:"no-store"});
+ let body={};try{body=await response.json()}catch{}
+ if(!response.ok)throw new Error(body.error||("HTTP "+response.status));
+ return body;
+}
+async function refreshToken(){if(!auth?.currentUser)throw new Error("نشست ورود پیدا نشد.");token=await auth.currentUser.getIdToken(true);}
+function resetForm(){ $("featureKey").value="";$("featureKey").readOnly=false;$("featureName").value="";$("description").value="";$("accessMode").value="free";$("price").value="";$("currency").value="IRR";$("trialDays").value="0";$("usageLimit").value="";$("enabled").checked=true; }
+function fillForm(f){$("featureKey").value=f.key;$("featureKey").readOnly=true;$("featureName").value=f.name;$("description").value=f.description||"";$("accessMode").value=f.access_mode;$("price").value=f.price_amount??"";$("currency").value=f.currency||"IRR";$("trialDays").value=f.trial_days??0;$("usageLimit").value=f.usage_limit??"";$("enabled").checked=!!f.enabled;}
+async function loadFeatures(){
+ const key=$("product").value;if(!key)return;
+ try{
+  const data=await api("/v1/admin/products/"+encodeURIComponent(key)+"/features");
+  $("features").replaceChildren();
+  if(!data.features.length){$("features").textContent="برای این محصول هنوز قابلیتی ثبت نشده است.";}
+  for(const f of data.features){
+   const card=document.createElement("div");card.className="feature";
+   const name=document.createElement("strong");name.textContent=f.name+" · "+f.key;
+   const info=document.createElement("div");info.innerHTML="";
+   const tags=[f.enabled?"فعال":"غیرفعال",f.access_mode==="free"?"رایگان":f.access_mode==="paid"?"پولی":"مسدود",f.price_amount==null?"بدون قیمت":String(f.price_amount)+" "+f.currency,f.usage_limit==null?"سقف نامحدود":"سقف "+f.usage_limit+" استفاده"];
+   for(const t of tags){const span=document.createElement("span");span.className="pill";span.textContent=t;info.append(span);}
+   const edit=document.createElement("button");edit.className="secondary";edit.textContent="ویرایش";edit.addEventListener("click",()=>{fillForm(f);$("editor").scrollIntoView({behavior:"smooth"});});
+   card.append(name,info,edit);$("features").append(card);
+  }
+  status("saveStatus","فهرست قابلیت‌ها به‌روز شد.");
+ }catch(e){status("saveStatus","دریافت قابلیت‌ها ناموفق بود: "+e.message,true);}
+}
+$("login").addEventListener("click",async()=>{
+ try{
+  const cfg={apiKey:$("apiKey").value.trim(),authDomain:$("authDomain").value.trim(),projectId:$("projectId").value.trim(),appId:$("appId").value.trim()};
+  if(Object.values(cfg).some(v=>!v))throw new Error("همه فیلدهای Firebase را کامل کنید.");
+  const [{initializeApp,getApps},{getAuth,GoogleAuthProvider,signInWithPopup,onAuthStateChanged}] = await Promise.all([
+   import("https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js"),
+   import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js")
+  ]);
+  const app=getApps().find(a=>a.name==="sahroud-central-admin")||initializeApp(cfg,"sahroud-central-admin");
+  auth=getAuth(app);
+  const credential=await signInWithPopup(auth,new GoogleAuthProvider());
+  user=credential.user;token=await user.getIdToken();
+  await refreshToken();
+  const catalog=await fetch(API+"/v1/catalog/products",{cache:"no-store"});if(!catalog.ok)throw new Error("دریافت فهرست محصولات ناموفق بود.");
+  products=(await catalog.json()).products||[];
+  $("product").replaceChildren();
+  for(const p of products){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("product").append(o);}
+  $("workspace").classList.remove("hidden");$("editor").classList.remove("hidden");$("logout").disabled=false;$("login").disabled=true;
+  status("authStatus","ورود Firebase انجام شد: "+user.email+"\nاکنون دسترسی مدیر از API مرکزی بررسی می‌شود.");
+  await loadFeatures();
+ }catch(e){status("authStatus","ورود یا بررسی دسترسی مدیر ناموفق بود: "+e.message,true);}
+});
+$("logout").addEventListener("click",async()=>{try{if(auth)await auth.signOut();}finally{auth=null;user=null;token=null;$("workspace").classList.add("hidden");$("editor").classList.add("hidden");$("logout").disabled=true;$("login").disabled=false;status("authStatus","از حساب خارج شدید.");}});
+$("product").addEventListener("change",loadFeatures);
+$("newFeature").addEventListener("click",()=>{resetForm();status("saveStatus","فرم برای تعریف قابلیت جدید آماده است.");});
+$("save").addEventListener("click",async()=>{
+ try{
+  const product=$("product").value,key=$("featureKey").value.trim(),name=$("featureName").value.trim(),mode=$("accessMode").value;
+  if(!product)throw new Error("ابتدا محصول را انتخاب کنید.");
+  if(!/^[a-z0-9][a-z0-9._-]{1,80}$/.test(key))throw new Error("کلید قابلیت باید ۲ تا ۸۱ نویسه و فقط شامل حروف کوچک انگلیسی، عدد، نقطه، خط تیره یا زیرخط باشد.");
+  if(!name)throw new Error("نام قابلیت الزامی است.");
+  const price=$("price").value===""?null:Number($("price").value),trial=Number($("trialDays").value),limit=$("usageLimit").value===""?null:Number($("usageLimit").value);
+  const payload={display_name:name,description:$("description").value.trim(),access_mode:mode,is_enabled:$("enabled").checked,price_amount:price,currency:$("currency").value.trim()||"IRR",trial_days:trial,usage_limit:limit};
+  await api("/v1/admin/products/"+encodeURIComponent(product)+"/features/"+encodeURIComponent(key),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+  status("saveStatus","تنظیمات قابلیت با موفقیت در دیتابیس مرکزی ذخیره شد.");
+  $("featureKey").readOnly=true;await loadFeatures();
+ }catch(e){status("saveStatus","ذخیره انجام نشد: "+e.message,true);}
+});
+</script>
+</body>
+</html>
