@@ -91,6 +91,10 @@ test("DO rejects unbound operations and prevents cross-account lease mutation", 
   assert.equal((await (await call(other, heartbeatToken, "heartbeat", { leaseId: "l1" })).json()).status, "not_found");
   assert.deepEqual(await (await call(other, releaseToken, "release", { leaseId: "l1" })).json(), { status: "released", existed: false });
 
+  const revokeToken = await signCoordinatorAssertion({ ...foreignScope, action: "revoke" }, secret);
+  const foreignRevoke = await call(other, revokeToken, "revoke", { leaseId: "l1" });
+  assert.deepEqual(await foreignRevoke.json(), { status: "revoked", count: 0, queuedCancelled: 0 });
+
   const ownerHeartbeat = await call(owner, await assertion("heartbeat", { leaseId: "l1" }), "heartbeat", { leaseId: "l1" });
   assert.equal((await ownerHeartbeat.json()).status, "renewed");
 });
