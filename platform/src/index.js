@@ -547,6 +547,24 @@ async function adminUpsertPlan(request, env, productKey) {
   return json({ saved: true, product_key: productKey, plan_code: planCode, display_name: displayName, is_active: !!isActive, feature_keys: featureKeys });
 }
 
+
+async function adminUpdatePlan(request, env, productKey, planCode) {
+  const identity = await verifyFirebaseIdToken(bearerToken(request), env);
+  if (!isCentralAdmin(identity, env)) return json({ error: "central_admin_required" }, 403);
+  if (!/^[a-z0-9-]{2,64}$/.test(productKey) || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(planCode)) return json({ error: "invalid_product_or_plan_key" }, 400);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "invalid_json" }, 400); }
+  if (typeof body?.is_active !== "boolean") return json({ error: "invalid_plan_status" }, 400);
+  const current = await env.CORE_DB.prepare("SELECT plan_code FROM plans WHERE product_key=? AND plan_code=?").bind(productKey, planCode).first();
+  if (!current) return json({ error: "plan_not_found" }, 404);
+  const now = new Date().toISOString();
+  await env.CORE_DB.batch([
+    env.CORE_DB.prepare("UPDATE plans SET is_active=?,updated_at=? WHERE product_key=? AND plan_code=?").bind(body.is_active ? 1 : 0, now, productKey, planCode),
+    env.CORE_DB.prepare("INSERT INTO audit_events (id,product_key,event_type,target_type,target_id,outcome,created_at,metadata_json) VALUES (?,?,'plan_status_updated','plan',?,'success',?,?)").bind(crypto.randomUUID(), productKey, planCode, now, JSON.stringify({ is_active: body.is_active, actor_uid: identity.subject }))
+  ]);
+  return json({ updated: true, product_key: productKey, plan_code: planCode, is_active: body.is_active });
+}
+
 async function adminAccountSubscriptions(request, env, accountId) {
   const identity = await verifyFirebaseIdToken(bearerToken(request), env);
   if (!isCentralAdmin(identity, env)) return json({ error: "central_admin_required" }, 403);
@@ -719,7 +737,7 @@ async function handle(request, env = {}) {
     response = await adminCreateSubscription(request, env, decodeURIComponent(url.pathname.split("/")[4]));
   } else if (request.method === "PATCH" && /^\/v1\/admin\/subscriptions\/[^/]+$/.test(url.pathname)) {
     response = await adminUpdateSubscription(request, env, decodeURIComponent(url.pathname.split("/")[4]));
-  } else if (request.method === "GET" && url.pathname === "/v1/admin/accounts") {
+  } else if (request.method === "PATCH" && /^\\/v1\\/admin\\/products\\/[a-z0-9-]+\\/plans\\/[^/]+$/.test(url.pathname)) {\n    const parts = url.pathname.split("/");\n    response = await adminUpdatePlan(request, env, parts[4], decodeURIComponent(parts[6]));\n  } else if (request.method === "GET" && url.pathname === "/v1/admin/accounts") {
     response = await adminAccountList(request, env);
   } else if (request.method === "GET" && /^\/v1\/admin\/accounts\/[^/]+\/grants$/.test(url.pathname)) {
     response = await adminAccountGrants(request, env, decodeURIComponent(url.pathname.split("/")[4]));
