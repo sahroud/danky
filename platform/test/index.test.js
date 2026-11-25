@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { handle, resolveCentralIdentity, resolveFeatureAccess, incrementFeatureUsage } from "../src/index.js";
+import { handle, resolveCentralIdentity, resolveFeatureAccess, incrementFeatureUsage, coordinateOperationForIdentity } from "../src/index.js";
+import { OperationCoordinatorDO } from "../src/operation-coordinator-do.js";
 
 const request = (path, options = {}) =>
   new Request(`https://central.test${path}`, options);
@@ -429,4 +430,105 @@ test("runtime policy admin endpoints require Firebase authentication", async () 
     }), env),
     /authentication_required/
   );
+});
+
+
+function operationDatabase(accountId) {
+  return {
+    prepare(sql) {
+      return {
+        bind() { return this; },
+        async all() {
+          if (sql.includes("FROM account_identities")) {
+            return { results: [{ principal_id: "principal-" + accountId, principal_status: "active", account_id: accountId, account_status: "active" }] };
+          }
+          return { results: [] };
+        },
+        async first() {
+          if (sql.includes("FROM product_features")) {
+            return { is_enabled: 1, access_mode: "free", usage_limit: null, lifecycle_status: "active" };
+          }
+          if (sql.includes("FROM feature_usage")) return null;
+          if (sql.includes("FROM product_runtime_policies")) {
+            return {
+              max_devices_per_account: 5, max_sessions_per_account: 3,
+              session_lease_seconds: 300, max_concurrent_operations: 2,
+              max_queued_operations: 3, queue_wait_seconds: 60,
+              operation_lease_seconds: 30, max_operation_lifetime_seconds: 120
+            };
+          }
+          if (sql.includes("FROM account_product_policy_overrides")) {
+            return {
+              max_devices_per_account: null, max_sessions_per_account: null,
+              max_concurrent_operations: 1, max_queued_operations: 1,
+              operation_lease_seconds: null, max_operation_lifetime_seconds: null
+            };
+          }
+          return null;
+        }
+      };
+    }
+  };
+}
+
+function operationStorage() {
+  const data = new Map();
+  let chain = Promise.resolve();
+  let alarm = null;
+  return {
+    async get(key) { return data.get(key); },
+    async put(key, value) { data.set(key, structuredClone(value)); },
+    async setAlarm(value) { alarm = value; },
+    async getAlarm() { return alarm; },
+    async deleteAlarm() { alarm = null; },
+    async transaction(callback) {
+      const run = chain.then(() => callback({
+        get: async key => data.get(key),
+        put: async (key, value) => data.set(key, structuredClone(value))
+      }));
+      chain = run.catch(() => {});
+      return run;
+    }
+  };
+}
+
+test("Worker operation admission enforces shared product and per-account limits", async () => {
+  const secret = "worker-test-secret-with-at-least-32-characters";
+  const storage = operationStorage();
+  const object = new OperationCoordinatorDO({ storage }, { OPERATION_ASSERTION_SECRET: secret });
+  const names = [];
+  const envFor = accountId => ({
+    CORE_DB: operationDatabase(accountId),
+    OPERATION_ASSERTION_SECRET: secret,
+    OPERATION_COORDINATOR: {
+      idFromName(name) { names.push(name); return name; },
+      get(id) { assert.equal(id, "steel"); return object; }
+    }
+  });
+  const acquire = (accountId, requestId) => coordinateOperationForIdentity(
+    new Request("https://central.test/v1/operations/steel/dxf-export/acquire", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ request_id: requestId })
+    }),
+    envFor(accountId),
+    { subject: "firebase-" + accountId },
+    "steel", "dxf-export", "acquire"
+  );
+
+  const first = await acquire("account-a", "request-a-0001");
+  assert.equal(first.status, 200);
+  assert.equal((await first.json()).status, "granted");
+
+  const second = await acquire("account-a", "request-a-0002");
+  assert.equal(second.status, 200);
+  assert.equal((await second.json()).status, "queued");
+
+  const third = await acquire("account-a", "request-a-0003");
+  assert.equal(third.status, 409);
+  assert.equal((await third.json()).reason, "capacity_full");
+
+  const otherAccount = await acquire("account-b", "request-b-0001");
+  assert.equal(otherAccount.status, 200);
+  assert.equal((await otherAccount.json()).status, "granted");
+  assert.deepEqual(names, ["steel", "steel", "steel", "steel"]);
 });
