@@ -750,6 +750,10 @@ async function consumeFeatureUsage(request, env, productKey, featureKey) {
  */
 async function coordinateOperation(request, env, productKey, featureKey, action) {
   const identity = await verifyFirebaseIdToken(bearerToken(request), env);
+  return coordinateOperationForIdentity(request, env, identity, productKey, featureKey, action);
+}
+
+async function coordinateOperationForIdentity(request, env, identity, productKey, featureKey, action) {
   let account;
   let body;
   try { body = await request.json(); }
@@ -950,5 +954,5 @@ export default {
   }
 };
 
-export { handle, API_VERSION, databaseHealth, verifyFirebaseIdToken, resolveCentralIdentity, resolveFeatureAccess, incrementFeatureUsage };
+export { handle, API_VERSION, databaseHealth, verifyFirebaseIdToken, resolveCentralIdentity, resolveFeatureAccess, incrementFeatureUsage, coordinateOperationForIdentity };
 export { OperationCoordinatorDO } from "./operation-coordinator-do.js";
