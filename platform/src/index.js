@@ -330,6 +330,55 @@ async function requireCentralAccount(env, identity, requestedAccountId = null) {
   return active[0];
 }
 
+
+async function adminRuntimePolicy(request, env, productKey) {
+  const identity = await verifyFirebaseIdToken(bearerToken(request), env);
+  if (!isCentralAdmin(identity, env)) return json({ error: "central_admin_required" }, 403);
+  if (!/^[a-z0-9-]{2,64}$/.test(productKey)) return json({ error: "invalid_product_key" }, 400);
+  const product = await env.CORE_DB.prepare("SELECT product_key,display_name FROM products WHERE product_key=? AND lifecycle_status<>'retired'").bind(productKey).first();
+  if (!product) return json({ error: "product_not_found" }, 404);
+  if (request.method === "GET") {
+    const policy = await env.CORE_DB.prepare("SELECT max_devices_per_account,max_sessions_per_account,session_lease_seconds,max_concurrent_operations,max_queued_operations,queue_wait_seconds,updated_at,updated_by FROM product_runtime_policies WHERE product_key=?").bind(productKey).first();
+    return json({ product, policy: policy || { max_devices_per_account:null,max_sessions_per_account:null,session_lease_seconds:300,max_concurrent_operations:null,max_queued_operations:0,queue_wait_seconds:0,updated_at:null,updated_by:null } });
+  }
+  let body; try { body = await request.json(); } catch { return json({ error:"invalid_json" },400); }
+  const pos = v => v === null ? null : Number.isSafeInteger(v) && v >= 1 && v <= 100000 ? v : undefined;
+  const devices=pos(body?.max_devices_per_account), sessions=pos(body?.max_sessions_per_account), operations=pos(body?.max_concurrent_operations);
+  const lease=body?.session_lease_seconds, queue=body?.max_queued_operations, wait=body?.queue_wait_seconds;
+  if (devices===undefined || sessions===undefined || operations===undefined || !Number.isInteger(lease) || lease<30 || lease>86400 || !Number.isSafeInteger(queue) || queue<0 || queue>100000 || !Number.isInteger(wait) || wait<0 || wait>86400 || (sessions!==null && devices!==null && sessions>devices)) return json({error:"invalid_runtime_policy"},400);
+  const now=new Date().toISOString();
+  await env.CORE_DB.batch([
+    env.CORE_DB.prepare("INSERT INTO product_runtime_policies (product_key,max_devices_per_account,max_sessions_per_account,session_lease_seconds,max_concurrent_operations,max_queued_operations,queue_wait_seconds,updated_at,updated_by) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(product_key) DO UPDATE SET max_devices_per_account=excluded.max_devices_per_account,max_sessions_per_account=excluded.max_sessions_per_account,session_lease_seconds=excluded.session_lease_seconds,max_concurrent_operations=excluded.max_concurrent_operations,max_queued_operations=excluded.max_queued_operations,queue_wait_seconds=excluded.queue_wait_seconds,updated_at=excluded.updated_at,updated_by=excluded.updated_by").bind(productKey,devices,sessions,lease,operations,queue,wait,now,identity.subject),
+    env.CORE_DB.prepare("INSERT INTO audit_events (id,product_key,event_type,target_type,target_id,outcome,created_at,metadata_json) VALUES (?,?,'runtime_policy_updated','product_runtime_policy',?,'success',?,?)").bind(crypto.randomUUID(),productKey,productKey,now,JSON.stringify({max_devices_per_account:devices,max_sessions_per_account:sessions,session_lease_seconds:lease,max_concurrent_operations:operations,max_queued_operations:queue,queue_wait_seconds:wait,actor_uid:identity.subject}))
+  ]);
+  return json({saved:true,product_key:productKey,policy:{max_devices_per_account:devices,max_sessions_per_account:sessions,session_lease_seconds:lease,max_concurrent_operations:operations,max_queued_operations:queue,queue_wait_seconds:wait,updated_at:now}});
+}
+
+async function adminAccountRuntimePolicy(request, env, accountId, productKey) {
+  const identity=await verifyFirebaseIdToken(bearerToken(request),env);
+  if(!isCentralAdmin(identity,env)) return json({error:"central_admin_required"},403);
+  if(!/^[a-z0-9-]{2,64}$/.test(productKey)||!accountId||accountId.length>128) return json({error:"invalid_account_or_product"},400);
+  const account=await env.CORE_DB.prepare("SELECT id FROM accounts WHERE id=?").bind(accountId).first();
+  const product=await env.CORE_DB.prepare("SELECT product_key FROM products WHERE product_key=? AND lifecycle_status<>'retired'").bind(productKey).first();
+  if(!account) return json({error:"account_not_found"},404);
+  if(!product) return json({error:"product_not_found"},404);
+  if(request.method==="GET"){
+    const override=await env.CORE_DB.prepare("SELECT max_devices_per_account,max_sessions_per_account,max_concurrent_operations,max_queued_operations,updated_at,updated_by FROM account_product_policy_overrides WHERE account_id=? AND product_key=?").bind(accountId,productKey).first();
+    return json({account_id:accountId,product_key:productKey,override:override||null});
+  }
+  let body;try{body=await request.json();}catch{return json({error:"invalid_json"},400);}
+  const pos=v=>v===null?null:Number.isSafeInteger(v)&&v>=1&&v<=100000?v:undefined;
+  const qv=v=>v===null?null:Number.isSafeInteger(v)&&v>=0&&v<=100000?v:undefined;
+  const devices=pos(body?.max_devices_per_account),sessions=pos(body?.max_sessions_per_account),operations=pos(body?.max_concurrent_operations),queue=qv(body?.max_queued_operations);
+  if(devices===undefined||sessions===undefined||operations===undefined||queue===undefined||(sessions!==null&&devices!==null&&sessions>devices))return json({error:"invalid_runtime_policy_override"},400);
+  const now=new Date().toISOString();
+  await env.CORE_DB.batch([
+    env.CORE_DB.prepare("INSERT INTO account_product_policy_overrides (account_id,product_key,max_devices_per_account,max_sessions_per_account,max_concurrent_operations,max_queued_operations,updated_at,updated_by) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(account_id,product_key) DO UPDATE SET max_devices_per_account=excluded.max_devices_per_account,max_sessions_per_account=excluded.max_sessions_per_account,max_concurrent_operations=excluded.max_concurrent_operations,max_queued_operations=excluded.max_queued_operations,updated_at=excluded.updated_at,updated_by=excluded.updated_by").bind(accountId,productKey,devices,sessions,operations,queue,now,identity.subject),
+    env.CORE_DB.prepare("INSERT INTO audit_events (id,account_id,product_key,event_type,target_type,target_id,outcome,created_at,metadata_json) VALUES (?,?,?,'runtime_policy_override_updated','account_product_policy_override',?,'success',?,?)").bind(crypto.randomUUID(),accountId,productKey,accountId+":"+productKey,now,JSON.stringify({max_devices_per_account:devices,max_sessions_per_account:sessions,max_concurrent_operations:operations,max_queued_operations:queue,actor_uid:identity.subject}))
+  ]);
+  return json({saved:true,account_id:accountId,product_key:productKey,override:{max_devices_per_account:devices,max_sessions_per_account:sessions,max_concurrent_operations:operations,max_queued_operations:queue,updated_at:now}});
+}
+
 async function adminFeatureList(request, env, productKey) {
   const identity = await verifyFirebaseIdToken(bearerToken(request), env);
   if (!isCentralAdmin(identity, env)) return json({ error: "central_admin_required" }, 403);
@@ -727,6 +776,11 @@ async function handle(request, env = {}) {
     response = await getProduct(env, productKey);
   } else if (request.method === "POST" && url.pathname === "/v1/auth/session") {
     response = await authenticate(request, env);
+  } else if ((request.method === "GET" || request.method === "PUT") && /^\/v1\/admin\/products\/[a-z0-9-]+\/runtime-policy$/.test(url.pathname)) {
+    response = await adminRuntimePolicy(request, env, url.pathname.split("/")[4]);
+  } else if ((request.method === "GET" || request.method === "PUT") && /^\/v1\/admin\/accounts\/[^/]+\/products\/[a-z0-9-]+\/runtime-policy$/.test(url.pathname)) {
+    const parts = url.pathname.split("/");
+    response = await adminAccountRuntimePolicy(request, env, decodeURIComponent(parts[4]), parts[6]);
   } else if (request.method === "POST" && /^\/v1\/admin\/products\/[a-z0-9-]+\/plans$/.test(url.pathname)) {
     response = await adminUpsertPlan(request, env, url.pathname.split("/")[4]);
   } else if (request.method === "GET" && /^\/v1\/admin\/products\/[a-z0-9-]+\/plans$/.test(url.pathname)) {
