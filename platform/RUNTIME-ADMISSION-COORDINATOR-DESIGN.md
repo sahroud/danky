@@ -55,7 +55,7 @@ Keep session_lease_seconds distinct from operation permit duration. Migration 00
 2. Cloudflare-runtime Vitest tests cover actual DO storage transactions, persistence across stubs, concurrent capacity, FIFO promotion, heartbeat, release, scope mismatch, and bad signatures. Alarm-based cleanup now stores the effective coordinator policy, schedules the earliest lease/queue deadline, expires leases and promotes waiters in `alarm()`, then schedules the next deadline. The alarm test forces an expired lease and invokes the scheduled alarm with the Cloudflare test helper. The Node-only storage harness also implements the storage alarm methods so legacy unit tests continue to exercise the coordinator without a real runtime.
 3. Worker-side policy resolver, signed assertions, and authenticated acquire/heartbeat/release routes are implemented and tested. Product-wide and account-specific concurrency/queue caps are resolved separately.
 4. Add adapters to STEEL, UTM, TASBIH and other product backends; demonstrate permit release in finally and heartbeat for long-running work.
-5. Implement registered-device and authenticated-session lifecycle separately from operation permits.
+5. Migration 0008 now defines account/product device registrations and hashed session-token leases with account/product foreign-key isolation. The registration/open/heartbeat/close/revoke APIs, atomic cap enforcement, and client device identity lifecycle remain pending; keep them separate from operation permits.
 6. Run API tests, schema tests, and local D1/DO tests in CI.
 7. Review Wrangler migration syntax and local binding behavior before any remote operation. Remote deployment and migration require separate explicit approval.
 
