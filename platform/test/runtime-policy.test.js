@@ -67,7 +67,7 @@ test("invalid or internally inconsistent effective policies are rejected", () =>
     /invalid_product_session_lease/
   );
   assert.throws(
-    () => resolveEffectiveRuntimePolicy(product, { operation_lease_seconds: 500 }),
+    () => resolveEffectiveRuntimePolicy(product, { operation_lease_seconds: 500, max_operation_lifetime_seconds: 400 }),
     /invalid_product_operation_lifetime/
   );
 });
