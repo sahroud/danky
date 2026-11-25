@@ -132,7 +132,7 @@ class MainActivity : Activity() {
         reportText = body("گزارش فعالیت هنوز آماده نیست.")
         root.addView(reportText)
         root.addView(action("به‌روزرسانی گزارش هفتگی") { refreshWeeklyReport() })
-        root.addView(body("گام‌ها، مسافت GPS و آب مصرفی به‌صورت محلی روی همین گوشی ذخیره می‌شوند. این نسخه هنوز به سرور مرکزی یا گوشی اعضای خانواده ارسال نمی‌کند."))
+        root.addView(body("گام‌شمار و اطلاعات سلامت فقط روی همین گوشی ذخیره می‌شوند و برای والد ارسال نمی‌شوند. موقعیت GPS فقط پس از اتصال با دعوت و رضایت صاحب گوشی، و فقط هنگام روشن بودن ثبت مسیر، به پنل خانواده ارسال می‌شود."))
         root.addView(body("هشدار: این برنامه ابزار تشخیص یا درمان پزشکی نیست. فشارخون و ضربان قلب را باید با دستگاه معتبر اندازه‌گیری و سپس دستی ثبت کنید."))
         setContentView(ScrollView(this).apply { addView(root) })
         refreshHealth()
@@ -229,9 +229,15 @@ class MainActivity : Activity() {
         val secure = DeviceCredentials.get(this)
         val connected = !secure.getString("device_token", null).isNullOrBlank()
         val uploadError = prefs.getString("family_upload_error", null)
+        val lastUpload = prefs.getString("family_last_upload", null)
+        val tracking = prefs.getBoolean("tracking_active", false)
         familyStatusText.text = if (connected) {
-            "وضعیت اتصال: متصل به خانواده | اشتراک‌گذاری فقط هنگام فعال بودن ثبت مسیر انجام می‌شود." +
-                if (uploadError.isNullOrBlank()) "" else "\\nآخرین خطای ارسال: $uploadError"
+            buildString {
+                append("وضعیت اتصال: متصل به خانواده")
+                append(if (tracking) "\\nثبت مسیر روشن است؛ ارسال موقعیت فعال است." else "\\nثبت مسیر خاموش است؛ موقعیتی ارسال نمی‌شود.")
+                if (!lastUpload.isNullOrBlank()) append("\\nآخرین ارسال موفق: $lastUpload")
+                if (!uploadError.isNullOrBlank()) append("\\nآخرین خطای ارسال: $uploadError")
+            }
         } else {
             "وضعیت اتصال: متصل نیست"
         }
@@ -275,6 +281,12 @@ class MainActivity : Activity() {
     private fun dayKey(): String = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
 
     private fun startTracking() {
+        // Keep foreground location sharing visibly disclosed on Android 13+.
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 44)
+            return
+        }
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
             checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 41)
@@ -433,6 +445,11 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 44 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            startTracking()
+        } else if (requestCode == 44) {
+            statusText.text = "برای نمایش اعلان دائمی، مجوز اعلان لازم است؛ ثبت مسیر شروع نشد."
+        }
         if (requestCode == 41 && grantResults.any { it == PackageManager.PERMISSION_GRANTED }) {
             startTracking()
         } else if (requestCode == 41) {
