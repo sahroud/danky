@@ -77,13 +77,18 @@ export async function handleDeviceSession(request, env, identity, productKey, re
 
   const account = await accountFor(request, env, identity);
   const now = nowIso();
-  const body = request.method === "GET" ? {} : await readBody(request);
+  const parsedBody = request.method === "GET" ? {} : await readBody(request);
+  const body = parsedBody || ((resource === "sessions" && (action === "heartbeat" || action === "close") &&
+    request.headers.get("X-Sahroud-Session-Token")) ? {} : null);
   if (!body) return json({ error: "invalid_json_or_body" }, 400);
 
-  let policy;
-  try { policy = await loadEffectiveDeviceSessionPolicy(env.CORE_DB, account.account_id, productKey); }
-  catch (error) {
-    return json({ error: error?.message === "device_session_policy_not_configured" ? error.message : "device_session_policy_invalid" }, 503);
+  let policy = null;
+  if ((resource === "devices" && action === "register") ||
+      (resource === "sessions" && (action === "open" || action === "heartbeat"))) {
+    try { policy = await loadEffectiveDeviceSessionPolicy(env.CORE_DB, account.account_id, productKey); }
+    catch (error) {
+      return json({ error: error?.message === "device_session_policy_not_configured" ? error.message : "device_session_policy_invalid" }, 503);
+    }
   }
 
   if (resource === "devices" && action === "register") {
