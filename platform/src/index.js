@@ -1,7 +1,7 @@
 import { importX509, jwtVerify } from "jose";
 import { loadEffectiveRuntimePolicy } from "./runtime-policy.js";
 import { signCoordinatorAssertion } from "./operation-coordinator-do.js";
-import { handleDeviceSession } from "./device-session.js";
+import { handleDeviceSession, handleAdminDeviceSessions } from "./device-session.js";
 
 const API_VERSION = "0.3.0";
 const FIREBASE_CERTS_URL = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
@@ -923,6 +923,12 @@ async function handle(request, env = {}) {
   } else if (request.method === "POST" && /^\/v1\/access\/[a-z0-9-]+\/[a-z0-9][a-z0-9._-]{1,80}\/consume$/.test(url.pathname)) {
     const parts = url.pathname.split("/");
     response = await consumeFeatureUsage(request, env, parts[3], parts[4]);
+  } else if (request.method === "GET" && /^\/v1\/admin\/accounts\/[^/]+\/products\/[a-z0-9-]+\/sessions$/.test(url.pathname)) {
+    response = await handleAdminDeviceSessions(request, env, await verifyFirebaseIdToken(bearerToken(request), env), decodeURIComponent(parts[4]), parts[6], "sessions", "list");
+  } else if (request.method === "POST" && /^\/v1\/admin\/accounts\/[^/]+\/products\/[a-z0-9-]+\/sessions\/[^/]+\/revoke$/.test(url.pathname)) {
+    response = await handleAdminDeviceSessions(request, env, await verifyFirebaseIdToken(bearerToken(request), env), decodeURIComponent(parts[4]), parts[6], "sessions", "revoke", decodeURIComponent(parts[8]));
+  } else if (request.method === "POST" && /^\/v1\/admin\/accounts\/[^/]+\/products\/[a-z0-9-]+\/devices\/[^/]+\/revoke$/.test(url.pathname)) {
+    response = await handleAdminDeviceSessions(request, env, await verifyFirebaseIdToken(bearerToken(request), env), decodeURIComponent(parts[4]), parts[6], "devices", "revoke", decodeURIComponent(parts[8]));
   } else if (request.method === "GET" && /^\/v1\/devices\/[a-z0-9-]+$/.test(url.pathname)) {
     const parts = url.pathname.split("/");
     const identity = await verifyFirebaseIdToken(bearerToken(request), env);
