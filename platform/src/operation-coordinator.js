@@ -41,10 +41,9 @@ function promote(state, now, cap, leaseSeconds, maxLifetimeSeconds) {
     if (!next) break;
     const [requestKey, entry] = next;
     delete state.queue[requestKey];
-    if (entry.expiresAt <= now) continue;
-    const leaseId = entry.leaseId;
-    state.leases[leaseId] = {
-      leaseId, requestId: entry.requestId, requestKey,
+    if (entry.expiresAt <= now || entry.maxExpiresAt <= now) continue;
+    state.leases[entry.leaseId] = {
+      leaseId: entry.leaseId, requestId: entry.requestId, requestKey,
       accountId: entry.accountId, productKey: entry.productKey,
       createdAt: now, expiresAt: Math.min(now + leaseSeconds, entry.maxExpiresAt),
       maxExpiresAt: entry.maxExpiresAt
@@ -62,6 +61,8 @@ export function acquire(state, input) {
     return { status: "denied", reason: "invalid_request_or_policy" };
   }
   purge(state, now);
+  // Always honor an older FIFO waiter before admitting a new request after expiry.
+  promote(state, now, cap, leaseSeconds, maxLifetimeSeconds);
   const requestKey = scopedRequestKey(accountId, productKey, requestId);
   const existing = Object.values(state.leases).find(x => x.requestKey === requestKey);
   if (existing) return { status: "granted", lease: { ...existing }, idempotent: true };
@@ -127,7 +128,7 @@ export function revoke(state, input) {
       (!leaseId && !accountId) ||
       (accountId !== undefined && (typeof accountId !== "string" || !accountId)) ||
       (productKey !== undefined && (typeof productKey !== "string" || !productKey))) {
-    return { status: "invalid_request", count: 0 };
+    return { status: "invalid_request", count: 0, queuedCancelled: 0 };
   }
   purge(state, now);
   let revoked = 0;
@@ -138,8 +139,17 @@ export function revoke(state, input) {
       revoked++;
     }
   }
+  let queuedCancelled = 0;
+  if (accountId) {
+    for (const [key, entry] of Object.entries(state.queue)) {
+      if (entry.accountId === accountId && (!productKey || entry.productKey === productKey)) {
+        delete state.queue[key];
+        queuedCancelled++;
+      }
+    }
+  }
   promote(state, now, cap, leaseSeconds, maxLifetimeSeconds);
-  return { status: "revoked", count: revoked };
+  return { status: "revoked", count: revoked, queuedCancelled };
 }
 
 export function expireAndPromote(state, input) {
