@@ -86,10 +86,16 @@ export function resolveEffectiveRuntimePolicy(productPolicy, accountOverride = n
     accountOverride?.max_operation_lifetime_seconds,
     operationLeaseSeconds, 604800, "invalid_product_operation_lifetime"
   );
-  const maxQueuedOperations = effectiveQueueLimit(
-    productPolicy.max_queued_operations,
-    accountOverride?.max_queued_operations
-  );
+  const productQueueLimit = nonNegativeOrNull(productPolicy.max_queued_operations);
+  const configuredAccountQueueLimit = nonNegativeOrNull(accountOverride?.max_queued_operations);
+  if (productQueueLimit === undefined || configuredAccountQueueLimit === undefined) {
+    throw new TypeError("invalid_runtime_policy_value");
+  }
+  const accountQueueLimit = productQueueLimit === null
+    ? 0
+    : configuredAccountQueueLimit === null
+      ? productQueueLimit
+      : Math.min(productQueueLimit, configuredAccountQueueLimit);
   const queueWaitSeconds = productPolicy.queue_wait_seconds;
   if (!Number.isSafeInteger(queueWaitSeconds) || queueWaitSeconds < 0 || queueWaitSeconds > 86400) {
     throw new TypeError("invalid_product_queue_wait");
@@ -100,7 +106,8 @@ export function resolveEffectiveRuntimePolicy(productPolicy, accountOverride = n
     maxSessionsPerAccount: maxSessions,
     productConcurrentCap,
     accountConcurrentCap,
-    maxQueuedOperations,
+    productQueueLimit: productQueueLimit ?? 0,
+    accountQueueLimit,
     sessionLeaseSeconds,
     operationLeaseSeconds,
     maxOperationLifetimeSeconds,
