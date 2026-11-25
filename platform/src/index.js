@@ -385,6 +385,116 @@ async function adminUpsertFeature(request, env, productKey, featureKey) {
   return json({ saved: true, product_key: productKey, feature_key: featureKey, enabled, access_mode: mode, api_version: API_VERSION });
 }
 
+
+function validIsoDate(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "string" || value.length > 40) return undefined;
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) return undefined;
+  return new Date(time).toISOString();
+}
+
+async function adminAccountList(request, env) {
+  const identity = await verifyFirebaseIdToken(bearerToken(request), env);
+  if (!isCentralAdmin(identity, env)) return json({ error: "central_admin_required" }, 403);
+  const query = new URL(request.url).searchParams.get("q")?.trim() || "";
+  if (query.length > 120) return json({ error: "invalid_search_query" }, 400);
+  const pattern = "%" + query.replace(/[\\%_]/g, "\\async function resolveFeatureAccess(request, env, identity, productKey, featureKey) {") + "%";
+  const result = await env.CORE_DB.prepare(
+    "SELECT id,display_name,account_type,status FROM accounts WHERE status='active' AND (?='' OR id LIKE ? ESCAPE '\\\\' OR display_name LIKE ? ESCAPE '\\\\') ORDER BY display_name LIMIT 50"
+  ).bind(query, pattern, pattern).all();
+  return json({ accounts: result.results || [] });
+}
+
+async function adminAccountGrants(request, env, accountId) {
+  const identity = await verifyFirebaseIdToken(bearerToken(request), env);
+  if (!isCentralAdmin(identity, env)) return json({ error: "central_admin_required" }, 403);
+  const account = await env.CORE_DB.prepare("SELECT id,display_name FROM accounts WHERE id=?").bind(accountId).first();
+  if (!account) return json({ error: "account_not_found" }, 404);
+  const result = await env.CORE_DB.prepare(
+    "SELECT g.id,g.product_key,g.feature_key,f.display_name AS feature_name,g.status,g.source_type,g.starts_at,g.ends_at,g.usage_limit,g.created_at,g.updated_at FROM account_feature_grants g JOIN product_features f ON f.product_key=g.product_key AND f.feature_key=g.feature_key WHERE g.account_id=? ORDER BY g.created_at DESC LIMIT 200"
+  ).bind(accountId).all();
+  return json({ account, grants: result.results || [] });
+}
+
+async function adminCreateGrant(request, env, accountId) {
+  const identity = await verifyFirebaseIdToken(bearerToken(request), env);
+  if (!isCentralAdmin(identity, env)) return json({ error: "central_admin_required" }, 403);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "invalid_json" }, 400); }
+  const productKey = typeof body?.product_key === "string" ? body.product_key : "";
+  const featureKey = typeof body?.feature_key === "string" ? body.feature_key : "";
+  const sourceType = body?.source_type || "manual";
+  const startsAt = validIsoDate(body?.starts_at);
+  const endsAt = validIsoDate(body?.ends_at);
+  const usageLimit = body?.usage_limit ?? null;
+  if (!/^[a-z0-9-]{2,64}$/.test(productKey) || !/^[a-z0-9][a-z0-9._-]{1,80}$/.test(featureKey) ||
+      !["manual","promotion","trial","purchase","subscription"].includes(sourceType) ||
+      startsAt === undefined || endsAt === undefined ||
+      (startsAt && endsAt && Date.parse(endsAt) <= Date.parse(startsAt)) ||
+      (usageLimit !== null && (!Number.isSafeInteger(usageLimit) || usageLimit < 0))) {
+    return json({ error: "invalid_grant_settings" }, 400);
+  }
+  const account = await env.CORE_DB.prepare("SELECT id FROM accounts WHERE id=? AND status='active'").bind(accountId).first();
+  if (!account) return json({ error: "active_account_not_found" }, 404);
+  const feature = await env.CORE_DB.prepare("SELECT access_mode,is_enabled FROM product_features WHERE product_key=? AND feature_key=?").bind(productKey, featureKey).first();
+  if (!feature) return json({ error: "feature_not_found" }, 404);
+  if (!feature.is_enabled || feature.access_mode === "disabled") return json({ error: "feature_disabled" }, 409);
+  const now = new Date().toISOString();
+  const grantId = crypto.randomUUID();
+  await env.CORE_DB.batch([
+    env.CORE_DB.prepare(
+      "INSERT INTO account_feature_grants (id,account_id,product_key,feature_key,status,source_type,starts_at,ends_at,usage_limit,created_at,updated_at,updated_by) VALUES (?,?,?,?, 'active', ?,?,?,?,?,?,?)"
+    ).bind(grantId, accountId, productKey, featureKey, sourceType, startsAt, endsAt, usageLimit, now, now, identity.subject),
+    env.CORE_DB.prepare(
+      "INSERT INTO audit_events (id,account_id,product_key,event_type,target_type,target_id,outcome,created_at,metadata_json) VALUES (?,?,?,'feature_grant_created','account_feature_grant',?,'success',?,?)"
+    ).bind(crypto.randomUUID(), accountId, productKey, grantId, now, JSON.stringify({ feature_key: featureKey, source_type: sourceType, starts_at: startsAt, ends_at: endsAt, usage_limit: usageLimit, actor_uid: identity.subject }))
+  ]);
+  return json({ created: true, grant_id: grantId, account_id: accountId, product_key: productKey, feature_key: featureKey, starts_at: startsAt, ends_at: endsAt, status: "active" }, 201);
+}
+
+async function adminUpdateGrant(request, env, grantId) {
+  const identity = await verifyFirebaseIdToken(bearerToken(request), env);
+  if (!isCentralAdmin(identity, env)) return json({ error: "central_admin_required" }, 403);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "invalid_json" }, 400); }
+  const allowedStatuses = ["active", "suspended", "revoked", "expired"];
+  const status = body?.status;
+  const hasEnd = body && Object.hasOwn(body, "ends_at");
+  const endsAt = hasEnd ? validIsoDate(body.ends_at) : null;
+  const hasLimit = body && Object.hasOwn(body, "usage_limit");
+  const usageLimit = hasLimit ? body.usage_limit : undefined;
+  if ((status !== undefined && !allowedStatuses.includes(status)) ||
+      (hasEnd && endsAt === undefined) ||
+      (hasLimit && usageLimit !== null && (!Number.isSafeInteger(usageLimit) || usageLimit < 0)) ||
+      (status === undefined && !hasEnd && !hasLimit)) return json({ error: "invalid_grant_update" }, 400);
+  const current = await env.CORE_DB.prepare("SELECT id,account_id,product_key,feature_key,starts_at,ends_at,status FROM account_feature_grants WHERE id=?").bind(grantId).first();
+  if (!current) return json({ error: "grant_not_found" }, 404);
+  const nextEnd = hasEnd ? endsAt : current.ends_at;
+  if (nextEnd && current.starts_at && Date.parse(nextEnd) <= Date.parse(current.starts_at)) return json({ error: "end_must_follow_start" }, 400);
+  const nextStatus = status || current.status;
+  const now = new Date().toISOString();
+  let updateSql = "UPDATE account_feature_grants SET status=?,updated_at=?,updated_by=? WHERE id=?";
+  let bindings = [nextStatus, now, identity.subject, grantId];
+  if (hasEnd && hasLimit) {
+    updateSql = "UPDATE account_feature_grants SET status=?,ends_at=?,usage_limit=?,updated_at=?,updated_by=? WHERE id=?";
+    bindings = [nextStatus, nextEnd, usageLimit, now, identity.subject, grantId];
+  } else if (hasEnd) {
+    updateSql = "UPDATE account_feature_grants SET status=?,ends_at=?,updated_at=?,updated_by=? WHERE id=?";
+    bindings = [nextStatus, nextEnd, now, identity.subject, grantId];
+  } else if (hasLimit) {
+    updateSql = "UPDATE account_feature_grants SET status=?,usage_limit=?,updated_at=?,updated_by=? WHERE id=?";
+    bindings = [nextStatus, usageLimit, now, identity.subject, grantId];
+  }
+  await env.CORE_DB.batch([
+    env.CORE_DB.prepare(updateSql).bind(...bindings),
+    env.CORE_DB.prepare(
+      "INSERT INTO audit_events (id,account_id,product_key,event_type,target_type,target_id,outcome,created_at,metadata_json) VALUES (?,?,?,'feature_grant_updated','account_feature_grant',?,'success',?,?)"
+    ).bind(crypto.randomUUID(), current.account_id, current.product_key, grantId, now, JSON.stringify({ status: nextStatus, ends_at: hasEnd ? nextEnd : current.ends_at, usage_limit: hasLimit ? usageLimit : "unchanged", actor_uid: identity.subject }))
+  ]);
+  return json({ updated: true, grant_id: grantId, status: nextStatus, ends_at: nextEnd });
+}
+
 async function resolveFeatureAccess(request, env, identity, productKey, featureKey) {
   const account = await requireCentralAccount(env, identity, request.headers.get('X-Sahroud-Account-Id'));
   if (!/^[a-z0-9-]{2,64}$/.test(productKey) || !/^[a-z0-9][a-z0-9._-]{1,80}$/.test(featureKey)) return { response: json({ error: "invalid_product_or_feature_key" }, 400) };
@@ -473,6 +583,14 @@ async function handle(request, env = {}) {
     response = await getProduct(env, productKey);
   } else if (request.method === "POST" && url.pathname === "/v1/auth/session") {
     response = await authenticate(request, env);
+  } else if (request.method === "GET" && url.pathname === "/v1/admin/accounts") {
+    response = await adminAccountList(request, env);
+  } else if (request.method === "GET" && /^\\/v1\\/admin\\/accounts\\/[^/]+\\/grants$/.test(url.pathname)) {
+    response = await adminAccountGrants(request, env, decodeURIComponent(url.pathname.split("/")[4]));
+  } else if (request.method === "POST" && /^\\/v1\\/admin\\/accounts\\/[^/]+\\/grants$/.test(url.pathname)) {
+    response = await adminCreateGrant(request, env, decodeURIComponent(url.pathname.split("/")[4]));
+  } else if (request.method === "PATCH" && /^\\/v1\\/admin\\/grants\\/[^/]+$/.test(url.pathname)) {
+    response = await adminUpdateGrant(request, env, decodeURIComponent(url.pathname.split("/")[4]));
   } else if (request.method === "GET" && /^\/v1\/admin\/products\/[a-z0-9-]+\/features$/.test(url.pathname)) {
     response = await adminFeatureList(request, env, url.pathname.split("/")[4]);
   } else if (request.method === "POST" && /^\/v1\/admin\/products\/[a-z0-9-]+\/features\/[a-z0-9][a-z0-9._-]{1,80}$/.test(url.pathname)) {
