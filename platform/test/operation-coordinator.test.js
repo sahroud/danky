@@ -33,7 +33,9 @@ test("heartbeat cannot extend beyond the lease's maximum lifetime", () => {
   const result = heartbeat(state, { ...policy, now: 120, leaseId: "lease-one" });
   assert.equal(result.status, "renewed");
   assert.equal(result.lease.expiresAt, 150);
-  const bounded = heartbeat(state, { ...policy, now: 185, leaseId: "lease-one" });
+  const second = heartbeat(state, { ...policy, now: 145, leaseId: "lease-one" });
+  assert.equal(second.lease.expiresAt, 175);
+  const bounded = heartbeat(state, { ...policy, now: 170, leaseId: "lease-one" });
   assert.equal(bounded.status, "renewed");
   assert.equal(bounded.lease.expiresAt, 190);
 });
