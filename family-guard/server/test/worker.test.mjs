@@ -279,3 +279,31 @@ test("family data requires a valid parent token", async () => {
   const response = await handle(request("/v1/family/devices"), { DB:new FakeD1() });
   assert.equal(response.status, 401);
 });
+
+
+test("device owner can stop sharing and subsequent location uploads are rejected", async () => {
+  const DB = new FakeD1();
+  const env = { DB };
+  const created = await (await handle(request("/v1/families", {
+    method:"POST", body:{parent_label:"Parent"}
+  }), env)).json();
+  const invite = await (await handle(request("/v1/invites", {
+    method:"POST", body:{}, token:created.parent_token
+  }), env)).json();
+  const paired = await (await handle(request("/v1/devices/pair", {
+    method:"POST", body:{invite_code:invite.invite_code,device_label:"Member phone",consent:true}
+  }), env)).json();
+
+  const stopped = await handle(request("/v1/devices/sharing/stop", {
+    method:"POST", body:{}, token:paired.device_token
+  }), env);
+  assert.equal(stopped.status, 200);
+  assert.equal(DB.devices.get(paired.device_id).sharing_enabled, 0);
+
+  const upload = await handle(request("/v1/location", {
+    method:"POST", token:paired.device_token,
+    body:{latitude:35.5,longitude:54.2,accuracy_m:8}
+  }), env);
+  assert.equal(upload.status, 403);
+  assert.equal(DB.locations.length, 0);
+});
