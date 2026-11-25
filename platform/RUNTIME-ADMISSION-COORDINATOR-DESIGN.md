@@ -1,6 +1,6 @@
 # Runtime Admission Coordinator Design
 
-Status: implementation planning; migration 0007 adds bounded operation-lease policy metadata. Durable Object binding/class and admission enforcement are not implemented yet; no deployment has occurred.
+Status: Durable Object class and unit-level signed-assertion/persistence tests are implemented on the feature branch. The Wrangler namespace binding, Worker-side policy resolver/signer, product-backend integration, Cloudflare-runtime DO tests, and deployment remain disabled/not implemented. No deployment has occurred.
 
 ## Safety boundary
 
@@ -51,8 +51,8 @@ Keep session_lease_seconds distinct from operation permit duration. Migration 00
 
 ## Implementation gates
 
-1. Implement the coordinator state machine and DO class on the feature branch; add bindings only after local tests are defined. Do not deploy.
-2. Add local Vitest/Miniflare tests for serialized concurrent acquire, cap boundaries, queue overflow/FIFO, idempotency, expiry, heartbeat, release, revoke, scope mismatch, bad signatures, and policy reductions.
+1. Coordinator state machine and an internal DO class are implemented on the feature branch. Its namespace is deliberately not bound yet; unit tests use a serialized storage harness. Do not deploy.
+2. Next add Cloudflare-runtime Vitest tests for the actual DO storage transaction, alarm/restart behavior, queue overflow/FIFO, idempotency, expiry, heartbeat, release, revoke, scope mismatch, bad signatures, and policy reductions before enabling a Wrangler binding.
 3. Add a worker-side policy resolver and signed assertion; test malformed/missing/stale assertions.
 4. Add a test-only adapter for product backends and demonstrate permit release in finally.
 5. Run API tests, schema tests, and local D1/DO tests in CI.
