@@ -12,89 +12,43 @@ const request = (path, body, headers = {}) => new Request("https://central.test"
 });
 const call = (req, resource, action) => handleDeviceSession(req, { CORE_DB: env.CORE_DB }, identity, productKey, resource, action);
 const deviceId = i => "install-" + String(i).padStart(4, "0");
-const execStatements = async sql => {
-  const statements = [];
-  let start = 0, depth = 0;
-  for (let i = 0; i < sql.length; i++) {
-    if (sql[i] === "(") depth++;
-    else if (sql[i] === ")") depth--;
-    else if (sql[i] === ";" && depth === 0) {
-      const statement = sql.slice(start, i).trim();
-      if (statement) statements.push(statement);
-      start = i + 1;
-    }
-  }
-  const tail = sql.slice(start).trim();
-  if (tail) statements.push(tail);
-  for (const statement of statements) await env.CORE_DB.exec(statement);
-};
-
 describe("D1 device and session lifecycle concurrency", () => {
   beforeAll(async () => {
-    await execStatements(`
-      DROP TABLE IF EXISTS account_product_sessions;
-      DROP TABLE IF EXISTS account_product_devices;
-      DROP TABLE IF EXISTS account_product_policy_overrides;
-      DROP TABLE IF EXISTS product_runtime_policies;
-      DROP TABLE IF EXISTS account_identities;
-      DROP TABLE IF EXISTS account_memberships;
-      DROP TABLE IF EXISTS principals;
-      DROP TABLE IF EXISTS accounts;
-      DROP TABLE IF EXISTS products;
-      CREATE TABLE products (product_key TEXT PRIMARY KEY, lifecycle_status TEXT NOT NULL);
-      CREATE TABLE accounts (id TEXT PRIMARY KEY, status TEXT NOT NULL);
-      CREATE TABLE principals (id TEXT PRIMARY KEY, status TEXT NOT NULL);
-      CREATE TABLE account_memberships (
-        account_id TEXT NOT NULL, principal_id TEXT NOT NULL, status TEXT NOT NULL,
-        PRIMARY KEY(account_id, principal_id)
-      );
-      CREATE TABLE account_identities (
-        provider TEXT NOT NULL, provider_subject TEXT NOT NULL, principal_id TEXT NOT NULL
-      );
-      CREATE TABLE product_runtime_policies (
-        product_key TEXT PRIMARY KEY, max_devices_per_account INTEGER,
-        max_sessions_per_account INTEGER, session_lease_seconds INTEGER
-      );
-      CREATE TABLE account_product_policy_overrides (
-        account_id TEXT NOT NULL, product_key TEXT NOT NULL,
-        max_devices_per_account INTEGER, max_sessions_per_account INTEGER,
-        PRIMARY KEY(account_id, product_key)
-      );
-      CREATE TABLE account_product_devices (
-        account_id TEXT NOT NULL, product_key TEXT NOT NULL, device_id TEXT NOT NULL,
-        device_label TEXT, platform TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'active', first_seen_at TEXT NOT NULL,
-        last_seen_at TEXT NOT NULL, revoked_at TEXT, created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL, PRIMARY KEY(account_id, product_key, device_id)
-      );
-      CREATE TABLE account_product_sessions (
-        session_id TEXT PRIMARY KEY, account_id TEXT NOT NULL, product_key TEXT NOT NULL,
-        principal_id TEXT NOT NULL, device_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
-        status TEXT NOT NULL DEFAULT 'active', issued_at TEXT NOT NULL,
-        expires_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, revoked_at TEXT,
-        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-      );
-      INSERT INTO products VALUES ('steel', 'development');
-      INSERT INTO accounts VALUES ('device-session-account', 'active');
-      INSERT INTO principals VALUES ('device-session-principal', 'active');
-      INSERT INTO account_memberships VALUES ('device-session-account', 'device-session-principal', 'active');
-      INSERT INTO account_identities VALUES ('firebase', 'firebase-device-session-test', 'device-session-principal');
-      INSERT INTO product_runtime_policies VALUES ('steel', 2, 3, 300);
-    `);
+    const statements = [
+      "DROP TABLE IF EXISTS account_product_sessions",
+      "DROP TABLE IF EXISTS account_product_devices",
+      "DROP TABLE IF EXISTS account_product_policy_overrides",
+      "DROP TABLE IF EXISTS product_runtime_policies",
+      "DROP TABLE IF EXISTS account_identities",
+      "DROP TABLE IF EXISTS account_memberships",
+      "DROP TABLE IF EXISTS principals",
+      "DROP TABLE IF EXISTS accounts",
+      "DROP TABLE IF EXISTS products",
+      "CREATE TABLE products (product_key TEXT PRIMARY KEY, lifecycle_status TEXT NOT NULL)",
+      "CREATE TABLE accounts (id TEXT PRIMARY KEY, status TEXT NOT NULL)",
+      "CREATE TABLE principals (id TEXT PRIMARY KEY, status TEXT NOT NULL)",
+      "CREATE TABLE account_memberships (account_id TEXT NOT NULL, principal_id TEXT NOT NULL, status TEXT NOT NULL, PRIMARY KEY(account_id, principal_id))",
+      "CREATE TABLE account_identities (provider TEXT NOT NULL, provider_subject TEXT NOT NULL, principal_id TEXT NOT NULL)",
+      "CREATE TABLE product_runtime_policies (product_key TEXT PRIMARY KEY, max_devices_per_account INTEGER, max_sessions_per_account INTEGER, session_lease_seconds INTEGER)",
+      "CREATE TABLE account_product_policy_overrides (account_id TEXT NOT NULL, product_key TEXT NOT NULL, max_devices_per_account INTEGER, max_sessions_per_account INTEGER, PRIMARY KEY(account_id, product_key))",
+      "CREATE TABLE account_product_devices (account_id TEXT NOT NULL, product_key TEXT NOT NULL, device_id TEXT NOT NULL, device_label TEXT, platform TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, revoked_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(account_id, product_key, device_id))",
+      "CREATE TABLE account_product_sessions (session_id TEXT PRIMARY KEY, account_id TEXT NOT NULL, product_key TEXT NOT NULL, principal_id TEXT NOT NULL, device_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, status TEXT NOT NULL DEFAULT 'active', issued_at TEXT NOT NULL, expires_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, revoked_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+      "INSERT INTO products VALUES ('steel', 'development')",
+      "INSERT INTO accounts VALUES ('device-session-account', 'active')",
+      "INSERT INTO principals VALUES ('device-session-principal', 'active')",
+      "INSERT INTO account_memberships VALUES ('device-session-account', 'device-session-principal', 'active')",
+      "INSERT INTO account_identities VALUES ('firebase', 'firebase-device-session-test', 'device-session-principal')",
+      "INSERT INTO product_runtime_policies VALUES ('steel', 2, 3, 300)"
+    ];
+    for (const sql of statements) await env.CORE_DB.prepare(sql).run();
   });
 
   afterAll(async () => {
-    await env.CORE_DB.exec(`
-      DROP TABLE IF EXISTS account_product_sessions;
-      DROP TABLE IF EXISTS account_product_devices;
-      DROP TABLE IF EXISTS account_product_policy_overrides;
-      DROP TABLE IF EXISTS product_runtime_policies;
-      DROP TABLE IF EXISTS account_identities;
-      DROP TABLE IF EXISTS account_memberships;
-      DROP TABLE IF EXISTS principals;
-      DROP TABLE IF EXISTS accounts;
-      DROP TABLE IF EXISTS products;
-    `);
+    for (const table of [
+      "account_product_sessions", "account_product_devices", "account_product_policy_overrides",
+      "product_runtime_policies", "account_identities", "account_memberships", "principals",
+      "accounts", "products"
+    ]) await env.CORE_DB.prepare("DROP TABLE IF EXISTS " + table).run();
   });
 
   it("never exceeds the device cap under concurrent registration and remains idempotent at cap", async () => {
