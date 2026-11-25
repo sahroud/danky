@@ -43,7 +43,7 @@ test("heartbeat cannot extend beyond the lease's maximum lifetime", () => {
 test("expired leases are removed and queued requests can be promoted", () => {
   const state = emptyCoordinatorState();
   acquire(state, request("one"));
-  acquire(state, request("two"));
+  acquire(state, { ...request("two"), maxWaitSeconds: 60 });
   const result = expireAndPromote(state, { ...policy, now: 131 });
   assert.equal(result.active, 1);
   assert.equal(state.leases["lease-two"].requestId, "two");
