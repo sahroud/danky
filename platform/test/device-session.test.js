@@ -44,15 +44,14 @@ test("device/session policy fails closed when either cap is unconfigured", async
   );
 });
 
-test("device/session policy rejects a session cap above device cap", async () => {
-  await assert.rejects(
-    loadEffectiveDeviceSessionPolicy(
-      policyDb({ max_devices_per_account: 2, max_sessions_per_account: 3, session_lease_seconds: 300 }),
-      "account-a",
-      "steel"
-    ),
-    error => error.message === "device_session_policy_not_configured"
+test("device and session ceilings remain independent", async () => {
+  const policy = await loadEffectiveDeviceSessionPolicy(
+    policyDb({ max_devices_per_account: 2, max_sessions_per_account: 5, session_lease_seconds: 300 }),
+    "account-a",
+    "steel"
   );
+  assert.equal(policy.maxDevicesPerAccount, 2);
+  assert.equal(policy.maxSessionsPerAccount, 5);
 });
 
 test("session close works with header token and does not depend on runtime caps", async () => {
