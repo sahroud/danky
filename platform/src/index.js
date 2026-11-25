@@ -842,4 +842,5 @@ export default {
   }
 };
 
-export { handle, API_VERSION, databaseHealth, verifyFirebaseIdToken, resolveCentralIdentity, resolveFeatureAccess, incrementFeatureUsage };\nexport { OperationCoordinatorDO } from "./operation-coordinator-do.js";
+export { handle, API_VERSION, databaseHealth, verifyFirebaseIdToken, resolveCentralIdentity, resolveFeatureAccess, incrementFeatureUsage };
+export { OperationCoordinatorDO } from "./operation-coordinator-do.js";
