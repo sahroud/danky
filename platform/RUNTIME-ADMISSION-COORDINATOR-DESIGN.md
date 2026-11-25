@@ -1,6 +1,6 @@
 # Runtime Admission Coordinator Design
 
-Status: Durable Object class and unit-level signed-assertion/persistence tests are implemented on the feature branch. The Wrangler namespace binding and SQLite class migration are now declared on this feature branch for local/runtime testing only. Cloudflare-runtime DO tests are being added. Worker-side policy resolver/signer, product-backend integration, and deployment remain disabled/not implemented. No deployment or remote migration has occurred.
+Status: Durable Object class, signed assertions, local Cloudflare-runtime tests, and alarm-based lease cleanup are implemented on the feature branch. The Wrangler namespace binding and SQLite class migration are declared for local/runtime testing only. Worker-side policy resolver/signer, product-backend integration, and deployment remain disabled/not implemented. No deployment or remote migration has occurred.
 
 ## Safety boundary
 
@@ -52,7 +52,7 @@ Keep session_lease_seconds distinct from operation permit duration. Migration 00
 ## Implementation gates
 
 1. Coordinator state machine and an internal DO class are implemented on the feature branch. Wrangler binding and SQLite migration are declared only to provision local test runtime; no public Worker route invokes the namespace. Do not deploy or run remote migrations.
-2. Add Cloudflare-runtime Vitest tests for actual DO storage transactions, restart behavior, queue overflow/FIFO, idempotency, expiry, heartbeat, release, revoke, scope mismatch, bad signatures, and policy reductions. Alarm-based cleanup remains a later task.
+2. Cloudflare-runtime Vitest tests cover actual DO storage transactions, persistence across stubs, concurrent capacity, FIFO promotion, heartbeat, release, scope mismatch, and bad signatures. Alarm-based cleanup now stores the effective coordinator policy, schedules the earliest lease/queue deadline, expires leases and promotes waiters in `alarm()`, then schedules the next deadline. The alarm test forces an expired lease and invokes the scheduled alarm with the Cloudflare test helper.
 3. Add a worker-side policy resolver and signed assertion; test malformed/missing/stale assertions.
 4. Add a test-only adapter for product backends and demonstrate permit release in finally.
 5. Run API tests, schema tests, and local D1/DO tests in CI.
