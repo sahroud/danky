@@ -64,7 +64,7 @@ APIهای کنترل دسترسی و سهمیه در شاخه توسعه پیا�
 
 مسیرهای عملیاتی به Firebase Bearer token و در حساب‌های چندعضوی به هدر `X-Sahroud-Account-Id` نیاز دارند. Worker عضویت و اشتراک/مجوز قابلیت را بررسی می‌کند؛ سپس یک assertion کوتاه‌عمر HMAC را به DO داخلی محصول می‌فرستد. DO مستقیماً در معرض اینترنت قرار نمی‌گیرد. سقف هم‌زمان محصول و سقف هر حساب، و همچنین سقف صف محصول و صف هر حساب مستقل‌اند.
 
-این اتصال فقط در شاخه توسعه است؛ دستگاه‌ها و نشست‌های مستقل هنوز پیاده‌سازی نشده‌اند و بک‌اند محصولات هنوز باید acquire/heartbeat/release را در چرخه واقعی کار خود به‌کار بگیرند. هیچ استقرار یا migration راه‌دور در این تغییر انجام نشده است.
+این اتصال فقط در شاخه توسعه است؛ API ثبت دستگاه، نشست زمان‌دار و مدیریت مرکزی نشست/دستگاه نیز پیاده‌سازی شده‌اند. بک‌اند محصولات هنوز باید acquire/heartbeat/release و چرخه نشست را در جریان واقعی کار خود به‌کار بگیرند. هیچ استقرار یا migration راه‌دور در این تغییر انجام نشده است.
 
 ## ساختار پوشه
 
@@ -117,6 +117,6 @@ The Worker exposes authenticated device/session lifecycle routes:
 - `POST /v1/sessions/{productKey}/heartbeat`
 - `POST /v1/sessions/{productKey}/close`
 
-Firebase authentication and active account membership are required. Device registration and session opening use separate effective account caps; account overrides can only tighten product caps. A session receives a random opaque token once; only its SHA-256 hash is persisted. Heartbeat extends the session lease, and device revocation also revokes that device's active sessions.
+Firebase authentication and active account membership are required. Device registration and session opening use separate effective account caps; account overrides can only tighten product caps. A session receives a random opaque token once; only its SHA-256 hash is persisted. Heartbeat extends the session lease; stale sessions are marked expired during list/open/heartbeat operations. Device revocation also revokes that device's active sessions. Central-admin endpoints list devices and sessions without exposing token hashes, and can revoke a session or device.
 
 A device ID identifies an app installation, not guaranteed physical hardware. Product device/session caps must be configured; missing caps fail closed. These routes are implemented in the branch but have not been deployed. Clients send the opaque token in the `X-Sahroud-Session-Token` header for heartbeat/close. Product adapters still need to call the lifecycle APIs.
