@@ -1,6 +1,6 @@
 # Runtime Admission Coordinator Design
 
-Status: design only; no Durable Object binding, class, migration, or deployment is included in this document.
+Status: implementation planning; migration 0007 adds bounded operation-lease policy metadata. Durable Object binding/class and admission enforcement are not implemented yet; no deployment has occurred.
 
 ## Safety boundary
 
@@ -47,11 +47,11 @@ Resolve limits in one documented function:
 4. A cap can be raised above the plan only by an explicitly authorized central admin action, recorded in the audit trail.
 5. NULL means inherit the next applicable layer; it must never silently mean unlimited when a stricter layer exists.
 
-Keep session_lease_seconds distinct from operation permit duration. Add an operation lease/max-lifetime policy before enabling production admission.
+Keep session_lease_seconds distinct from operation permit duration. Migration 0007 adds operation_lease_seconds (default 300; 30–86400) and max_operation_lifetime_seconds (default 3600; 30–604800), with nullable account/product overrides. These are policy metadata only until the coordinator enforces them.
 
 ## Implementation gates
 
-1. Add the DO class and bindings only on the feature branch; do not deploy.
+1. Implement the coordinator state machine and DO class on the feature branch; add bindings only after local tests are defined. Do not deploy.
 2. Add local Vitest/Miniflare tests for serialized concurrent acquire, cap boundaries, queue overflow/FIFO, idempotency, expiry, heartbeat, release, revoke, scope mismatch, bad signatures, and policy reductions.
 3. Add a worker-side policy resolver and signed assertion; test malformed/missing/stale assertions.
 4. Add a test-only adapter for product backends and demonstrate permit release in finally.
