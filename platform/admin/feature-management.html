@@ -80,6 +80,16 @@ button.secondary{background:#21465b;color:#effaff;border:1px solid #3a6278}butto
 <div id="subscriptionList" style="margin-top:12px"></div>
 </section>
 
+<section class="panel hidden" id="sessionsPanel">
+<h2>۷. مدیریت دستگاه‌ها و نشست‌های فعال</h2>
+<div class="grid">
+<div><label for="sessionProduct">محصول</label><select id="sessionProduct"></select></div>
+</div>
+<div class="actions"><button class="secondary" id="refreshSessions">به‌روزرسانی دستگاه‌ها و نشست‌ها</button></div>
+<div class="status" id="sessionStatus" role="status">ابتدا حساب کاربری را جست‌وجو و انتخاب کنید.</div>
+<div id="sessionList" style="margin-top:12px"></div>
+<div class="muted">لغو دستگاه، همه نشست‌های فعال همان نصب را نیز لغو می‌کند. شناسه دستگاه، شناسه نصب برنامه است و لزوماً شناسه سخت‌افزار فیزیکی نیست.</div>
+</section>
 <section class="panel hidden" id="plansPanel">
 <h2>۶. تعریف طرح‌های اشتراک</h2>
 <div class="grid">
@@ -171,6 +181,41 @@ async function loadSubscriptionPlans(){
   if(!$("subscriptionPlan").options.length){const o=document.createElement("option");o.value="";o.textContent="برای این محصول طرح فعالی ثبت نشده است";$("subscriptionPlan").append(o);}
  }catch(e){status("subscriptionStatus","دریافت طرح‌ها ناموفق بود: "+e.message,true);}
 }
+async function loadAccountSessions(){
+ try{
+  const account=$("accountSelect").value,product=$("sessionProduct").value;
+  if(!account||!product){$("sessionList").replaceChildren();status("sessionStatus","حساب و محصول را انتخاب کنید.");return;}
+  const data=await api("/v1/admin/accounts/"+encodeURIComponent(account)+"/products/"+encodeURIComponent(product)+"/sessions");
+  $("sessionList").replaceChildren();
+  const devices=data.devices||[],sessions=data.sessions||[];
+  if(!devices.length&&!sessions.length){$("sessionList").textContent="برای این حساب و محصول دستگاه یا نشستی ثبت نشده است.";}
+  for(const d of devices){
+   const card=document.createElement("div");card.className="feature";
+   const title=document.createElement("strong");title.textContent=(d.device_label||"دستگاه بدون نام")+" · "+d.device_id;
+   const info=document.createElement("div");info.className="muted";info.textContent="نوع: "+d.platform+" | وضعیت: "+d.status+" | آخرین فعالیت: "+d.last_seen_at;
+   card.append(title,info);
+   if(d.status==="active"){
+    const revoke=document.createElement("button");revoke.className="secondary";revoke.textContent="لغو دستگاه و نشست‌های وابسته";
+    revoke.addEventListener("click",async()=>{if(!confirm("این دستگاه و تمام نشست‌های فعال وابسته لغو شوند؟"))return;try{await api("/v1/admin/accounts/"+encodeURIComponent(account)+"/products/"+encodeURIComponent(product)+"/devices/"+encodeURIComponent(d.device_id)+"/revoke",{method:"POST"});status("sessionStatus","دستگاه و نشست‌های وابسته لغو شدند.");await loadAccountSessions();}catch(e){status("sessionStatus","لغو دستگاه ناموفق بود: "+e.message,true);}});
+    card.append(revoke);
+   }
+   $("sessionList").append(card);
+  }
+  for(const s of sessions){
+   const card=document.createElement("div");card.className="feature";
+   const title=document.createElement("strong");title.textContent="نشست "+s.session_id;
+   const info=document.createElement("div");info.className="muted";info.textContent="دستگاه: "+s.device_id+" | وضعیت: "+s.status+" | شروع: "+s.issued_at+" | انقضا: "+s.expires_at+" | آخرین فعالیت: "+s.last_seen_at;
+   card.append(title,info);
+   if(s.status==="active"){
+    const revoke=document.createElement("button");revoke.className="secondary";revoke.textContent="لغو این نشست";
+    revoke.addEventListener("click",async()=>{if(!confirm("این نشست لغو شود؟"))return;try{await api("/v1/admin/accounts/"+encodeURIComponent(account)+"/products/"+encodeURIComponent(product)+"/sessions/"+encodeURIComponent(s.session_id)+"/revoke",{method:"POST"});status("sessionStatus","نشست لغو شد.");await loadAccountSessions();}catch(e){status("sessionStatus","لغو نشست ناموفق بود: "+e.message,true);}});
+    card.append(revoke);
+   }
+   $("sessionList").append(card);
+  }
+  status("sessionStatus",devices.length+" دستگاه و "+sessions.length+" نشست در فهرست ثبت‌شده‌اند.");
+ }catch(e){status("sessionStatus","دریافت دستگاه‌ها و نشست‌ها ناموفق بود: "+e.message,true);}
+}
 async function loadAccountSubscriptions(){
  try{
   const account=$("accountSelect").value;if(!account)return;
@@ -199,7 +244,7 @@ async function searchAccounts(){
   for(const a of data.accounts||[]){const o=document.createElement("option");o.value=a.id;o.textContent=a.display_name+" · "+a.id;$("accountSelect").append(o);}
   if(!(data.accounts||[]).length){const o=document.createElement("option");o.value="";o.textContent="حسابی یافت نشد";$("accountSelect").append(o);}
   status("grantStatus",(data.accounts||[]).length+" حساب پیدا شد.");
-  if(data.accounts?.length){await loadAccountGrants();await loadAccountSubscriptions();}
+  if(data.accounts?.length){await loadAccountGrants();await loadAccountSubscriptions();await loadAccountSessions();}
  }catch(e){status("grantStatus","جست‌وجوی حساب ناموفق بود: "+e.message,true);}
 }
 async function loadGrantFeatures(){
@@ -250,20 +295,22 @@ $("login").addEventListener("click",async()=>{
   products=(await catalog.json()).products||[];
   $("product").replaceChildren();
   for(const p of products){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("product").append(o);}
-  $("workspace").classList.remove("hidden");$("editor").classList.remove("hidden");$("grantsPanel").classList.remove("hidden");$("subscriptionsPanel").classList.remove("hidden");$("plansPanel").classList.remove("hidden");$("logout").disabled=false;$("login").disabled=true;
-  $("grantProduct").replaceChildren();for(const p of products){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("grantProduct").append(o);}await loadGrantFeatures();$("subscriptionProduct").replaceChildren();for(const p of products){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("subscriptionProduct").append(o);}await loadSubscriptionPlans();await loadPlanFeatureChoices();
+  $("workspace").classList.remove("hidden");$("sessionsPanel").classList.remove("hidden");$("editor").classList.remove("hidden");$("grantsPanel").classList.remove("hidden");$("subscriptionsPanel").classList.remove("hidden");$("plansPanel").classList.remove("hidden");$("logout").disabled=false;$("login").disabled=true;
+  $("grantProduct").replaceChildren();for(const p of products){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("grantProduct").append(o);}await loadGrantFeatures();$("subscriptionProduct").replaceChildren();for(const p of products){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("subscriptionProduct").append(o);}await loadSubscriptionPlans();await loadPlanFeatureChoices();$("sessionProduct").replaceChildren();for(const p of products){const o=document.createElement("option");o.value=p.id;o.textContent=p.name;$("sessionProduct").append(o);}
   status("authStatus","ورود Firebase انجام شد: "+user.email+"\nاکنون دسترسی مدیر از API مرکزی بررسی می‌شود.");
   await loadFeatures();
  }catch(e){status("authStatus","ورود یا بررسی دسترسی مدیر ناموفق بود: "+e.message,true);}
 });
-$("logout").addEventListener("click",async()=>{try{if(auth)await auth.signOut();}finally{auth=null;user=null;token=null;$("workspace").classList.add("hidden");$("editor").classList.add("hidden");$("grantsPanel").classList.add("hidden");$("subscriptionsPanel").classList.add("hidden");$("plansPanel").classList.add("hidden");$("logout").disabled=true;$("login").disabled=false;status("authStatus","از حساب خارج شدید.");}});
+$("logout").addEventListener("click",async()=>{try{if(auth)await auth.signOut();}finally{auth=null;user=null;token=null;$("workspace").classList.add("hidden");$("editor").classList.add("hidden");$("grantsPanel").classList.add("hidden");$("subscriptionsPanel").classList.add("hidden");$("plansPanel").classList.add("hidden");$("sessionsPanel").classList.add("hidden");$("logout").disabled=true;$("login").disabled=false;status("authStatus","از حساب خارج شدید.");}});
 $("product").addEventListener("change",loadFeatures);
 $("newFeature").addEventListener("click",()=>{resetForm();status("saveStatus","فرم برای تعریف قابلیت جدید آماده است.");});
 
 
 $("subscriptionProduct").addEventListener("change",async()=>{await loadSubscriptionPlans();await loadPlanFeatureChoices();});
 $("refreshSubscriptions").addEventListener("click",loadAccountSubscriptions);
-$("accountSelect").addEventListener("change",()=>{loadAccountGrants();loadAccountSubscriptions();});
+$("accountSelect").addEventListener("change",()=>{loadAccountGrants();loadAccountSubscriptions();loadAccountSessions();});
+$("sessionProduct").addEventListener("change",loadAccountSessions);
+$("refreshSessions").addEventListener("click",loadAccountSessions);
 
 $("savePlan").addEventListener("click",async()=>{
  try{
