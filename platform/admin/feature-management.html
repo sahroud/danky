@@ -155,6 +155,9 @@ async function loadAccountGrants(){
    for(const [label,value] of [["فعال‌سازی","active"],["تعلیق","suspended"],["لغو","revoked"]]){
     const b=document.createElement("button");b.className="secondary";b.textContent=label;b.addEventListener("click",async()=>{try{await api("/v1/admin/grants/"+encodeURIComponent(g.id),{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({status:value})});status("grantStatus","وضعیت مجوز تغییر کرد.");await loadAccountGrants();}catch(e){status("grantStatus","تغییر مجوز ناموفق بود: "+e.message,true);}});actions.append(b);
    }
+   const expiry=document.createElement("input");expiry.type="datetime-local";expiry.setAttribute("aria-label","تاریخ پایان جدید؛ خالی یعنی دائمی");if(g.ends_at)expiry.value=new Date(g.ends_at).toISOString().slice(0,16);
+   const extend=document.createElement("button");extend.className="secondary";extend.textContent="ثبت تاریخ پایان";extend.addEventListener("click",async()=>{try{const ends_at=expiry.value?new Date(expiry.value).toISOString():null;await api("/v1/admin/grants/"+encodeURIComponent(g.id),{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({ends_at})});status("grantStatus",ends_at?"تاریخ پایان مجوز به‌روزرسانی شد.":"مجوز به حالت دائمی تغییر کرد.");await loadAccountGrants();}catch(e){status("grantStatus","تغییر تاریخ پایان ناموفق بود: "+e.message,true);}});
+   actions.append(expiry,extend);
    card.append(title,details,actions);$("grantList").append(card);
   }
  }catch(e){status("grantStatus","دریافت مجوزها ناموفق بود: "+e.message,true);}
