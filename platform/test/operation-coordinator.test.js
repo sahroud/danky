@@ -80,3 +80,23 @@ test("invalid policy and malformed requests fail closed", () => {
   assert.equal(acquire(state, { ...request("bad2"), maxLifetimeSeconds: 1 }).reason, "invalid_request_or_policy");
   assert.equal(acquire(state, { ...request("bad3"), accountId: "" }).reason, "invalid_request_or_policy");
 });
+
+test("new requests cannot jump ahead of an older waiter after lease expiry", () => {
+  const state = emptyCoordinatorState();
+  acquire(state, request("first"));
+  acquire(state, { ...request("waiter"), maxWaitSeconds: 60 });
+  const newcomer = acquire(state, request("newcomer", "acct-b", 131));
+  assert.equal(state.leases["lease-waiter"].requestId, "waiter");
+  assert.equal(newcomer.status, "queued");
+});
+
+test("account/product revocation also cancels queued requests in that scope", () => {
+  const state = emptyCoordinatorState();
+  acquire(state, request("active"));
+  acquire(state, request("waiting"));
+  const result = revoke(state, { ...policy, now: 101, accountId: "acct-a", productKey: "steel" });
+  assert.equal(result.count, 1);
+  assert.equal(result.queuedCancelled, 1);
+  assert.equal(Object.keys(state.leases).length, 0);
+  assert.equal(Object.keys(state.queue).length, 0);
+});
