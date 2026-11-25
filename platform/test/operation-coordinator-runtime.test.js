@@ -9,8 +9,10 @@ const stub = label => env.OPERATION_COORDINATOR.get(
   env.OPERATION_COORDINATOR.idFromName("runtime-" + label + "-" + crypto.randomUUID())
 );
 async function token(action, binding = {}, policy = {}) {
-  return signCoordinatorAssertion({ ...base, ...policy, ...binding, action,
-    expiresAt: Math.floor(Date.now() / 1000) + 60 }, secret);
+  const expiresAt = policy.expiresAt ?? (Math.floor(Date.now() / 1000) + 60);
+  const limits = { ...base, ...policy };
+  delete limits.expiresAt;
+  return signCoordinatorAssertion({ ...limits, ...binding, action, expiresAt }, secret);
 }
 async function call(object, action, assertion, input = {}) {
   return object.fetch("https://coordinator.internal/" + action, { method: "POST",
