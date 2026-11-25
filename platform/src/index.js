@@ -495,6 +495,81 @@ async function adminUpdateGrant(request, env, grantId) {
   return json({ updated: true, grant_id: grantId, status: nextStatus, ends_at: nextEnd });
 }
 
+
+async function adminAccountSubscriptions(request, env, accountId) {
+  const identity = await verifyFirebaseIdToken(bearerToken(request), env);
+  if (!isCentralAdmin(identity, env)) return json({ error: "central_admin_required" }, 403);
+  const account = await env.CORE_DB.prepare("SELECT id,display_name FROM accounts WHERE id=?").bind(accountId).first();
+  if (!account) return json({ error: "account_not_found" }, 404);
+  const result = await env.CORE_DB.prepare(
+    "SELECT s.id,s.product_key,s.plan_code,p.display_name AS plan_name,s.status,s.starts_at,s.ends_at,s.billing_provider,s.created_at,s.updated_at FROM subscriptions s JOIN plans p ON p.product_key=s.product_key AND p.plan_code=s.plan_code WHERE s.account_id=? ORDER BY s.created_at DESC LIMIT 200"
+  ).bind(accountId).all();
+  return json({ account, subscriptions: result.results || [] });
+}
+
+async function adminCreateSubscription(request, env, accountId) {
+  const identity = await verifyFirebaseIdToken(bearerToken(request), env);
+  if (!isCentralAdmin(identity, env)) return json({ error: "central_admin_required" }, 403);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "invalid_json" }, 400); }
+  const productKey = typeof body?.product_key === "string" ? body.product_key : "";
+  const planCode = typeof body?.plan_code === "string" ? body.plan_code : "";
+  const startsAt = validIsoDate(body?.starts_at);
+  const endsAt = validIsoDate(body?.ends_at);
+  if (!/^[a-z0-9-]{2,64}$/.test(productKey) || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(planCode) ||
+      startsAt === undefined || endsAt === undefined ||
+      (startsAt && endsAt && Date.parse(endsAt) <= Date.parse(startsAt))) {
+    return json({ error: "invalid_subscription_settings" }, 400);
+  }
+  const account = await env.CORE_DB.prepare("SELECT id FROM accounts WHERE id=? AND status='active'").bind(accountId).first();
+  if (!account) return json({ error: "active_account_not_found" }, 404);
+  const plan = await env.CORE_DB.prepare(
+    "SELECT p.plan_code,p.display_name,pr.lifecycle_status FROM plans p JOIN products pr ON pr.product_key=p.product_key WHERE p.product_key=? AND p.plan_code=? AND p.is_active=1"
+  ).bind(productKey, planCode).first();
+  if (!plan || plan.lifecycle_status === "retired") return json({ error: "active_plan_not_found" }, 404);
+  const now = new Date().toISOString();
+  const subscriptionId = crypto.randomUUID();
+  await env.CORE_DB.batch([
+    env.CORE_DB.prepare(
+      "INSERT INTO subscriptions (id,account_id,product_key,plan_code,status,starts_at,ends_at,billing_provider,provider_subscription_ref,created_at,updated_at) VALUES (?,?,?,?, 'active', ?,?,NULL,NULL,?,?)"
+    ).bind(subscriptionId, accountId, productKey, planCode, startsAt, endsAt, now, now),
+    env.CORE_DB.prepare(
+      "INSERT INTO audit_events (id,account_id,product_key,event_type,target_type,target_id,outcome,created_at,metadata_json) VALUES (?,?,?,'subscription_created','subscription',?,'success',?,?)"
+    ).bind(crypto.randomUUID(), accountId, productKey, subscriptionId, now, JSON.stringify({ plan_code: planCode, starts_at: startsAt, ends_at: endsAt, actor_uid: identity.subject, source: "admin_manual" }))
+  ]);
+  return json({ created: true, subscription_id: subscriptionId, account_id: accountId, product_key: productKey, plan_code: planCode, status: "active", starts_at: startsAt, ends_at: endsAt }, 201);
+}
+
+async function adminUpdateSubscription(request, env, subscriptionId) {
+  const identity = await verifyFirebaseIdToken(bearerToken(request), env);
+  if (!isCentralAdmin(identity, env)) return json({ error: "central_admin_required" }, 403);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "invalid_json" }, 400); }
+  const statuses = ["pending", "active", "past_due", "cancelled", "expired"];
+  const status = body?.status;
+  const hasEnd = body && Object.hasOwn(body, "ends_at");
+  const endsAt = hasEnd ? validIsoDate(body.ends_at) : null;
+  if ((status !== undefined && !statuses.includes(status)) || (hasEnd && endsAt === undefined) ||
+      (status === undefined && !hasEnd)) return json({ error: "invalid_subscription_update" }, 400);
+  const current = await env.CORE_DB.prepare("SELECT id,account_id,product_key,starts_at,ends_at,status FROM subscriptions WHERE id=?").bind(subscriptionId).first();
+  if (!current) return json({ error: "subscription_not_found" }, 404);
+  const nextEnd = hasEnd ? endsAt : current.ends_at;
+  if (nextEnd && current.starts_at && Date.parse(nextEnd) <= Date.parse(current.starts_at)) return json({ error: "end_must_follow_start" }, 400);
+  const nextStatus = status || current.status;
+  const now = new Date().toISOString();
+  const sql = hasEnd
+    ? "UPDATE subscriptions SET status=?,ends_at=?,updated_at=? WHERE id=?"
+    : "UPDATE subscriptions SET status=?,updated_at=? WHERE id=?";
+  const bindings = hasEnd ? [nextStatus, nextEnd, now, subscriptionId] : [nextStatus, now, subscriptionId];
+  await env.CORE_DB.batch([
+    env.CORE_DB.prepare(sql).bind(...bindings),
+    env.CORE_DB.prepare(
+      "INSERT INTO audit_events (id,account_id,product_key,event_type,target_type,target_id,outcome,created_at,metadata_json) VALUES (?,?,?,'subscription_updated','subscription',?,'success',?,?)"
+    ).bind(crypto.randomUUID(), current.account_id, current.product_key, subscriptionId, now, JSON.stringify({ status: nextStatus, ends_at: nextEnd, actor_uid: identity.subject }))
+  ]);
+  return json({ updated: true, subscription_id: subscriptionId, status: nextStatus, ends_at: nextEnd });
+}
+
 async function resolveFeatureAccess(request, env, identity, productKey, featureKey) {
   const account = await requireCentralAccount(env, identity, request.headers.get('X-Sahroud-Account-Id'));
   if (!/^[a-z0-9-]{2,64}$/.test(productKey) || !/^[a-z0-9][a-z0-9._-]{1,80}$/.test(featureKey)) return { response: json({ error: "invalid_product_or_feature_key" }, 400) };
@@ -583,6 +658,12 @@ async function handle(request, env = {}) {
     response = await getProduct(env, productKey);
   } else if (request.method === "POST" && url.pathname === "/v1/auth/session") {
     response = await authenticate(request, env);
+  } else if (request.method === "GET" && /^\\/v1\\/admin\\/accounts\\/[^/]+\\/subscriptions$/.test(url.pathname)) {
+    response = await adminAccountSubscriptions(request, env, decodeURIComponent(url.pathname.split("/")[4]));
+  } else if (request.method === "POST" && /^\\/v1\\/admin\\/accounts\\/[^/]+\\/subscriptions$/.test(url.pathname)) {
+    response = await adminCreateSubscription(request, env, decodeURIComponent(url.pathname.split("/")[4]));
+  } else if (request.method === "PATCH" && /^\\/v1\\/admin\\/subscriptions\\/[^/]+$/.test(url.pathname)) {
+    response = await adminUpdateSubscription(request, env, decodeURIComponent(url.pathname.split("/")[4]));
   } else if (request.method === "GET" && url.pathname === "/v1/admin/accounts") {
     response = await adminAccountList(request, env);
   } else if (request.method === "GET" && /^\/v1\/admin\/accounts\/[^/]+\/grants$/.test(url.pathname)) {
