@@ -76,8 +76,8 @@ class FakeD1 {
           return { meta: { changes: 1 } };
         }
         if (sql.includes("INSERT INTO family_members")) {
-          const [id,family_id,role,label,token_hash,status,subscription_status,created_at] = args;
-          db.members.set(id,{id,family_id,role,label,token_hash,status,subscription_status,created_at});
+          const [id,family_id,label,token_hash,created_at] = args;
+          db.members.set(id,{id,family_id,role:"owner",label,token_hash,status:"active",subscription_status:"included",created_at});
           return { meta: { changes: 1 } };
         }
         if (sql.includes("INSERT INTO invites")) {
