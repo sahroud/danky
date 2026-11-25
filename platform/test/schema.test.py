@@ -31,6 +31,9 @@ required = {
     "account_feature_grants",
     "plan_features",
     "feature_usage",
+    "checkout_orders",
+    "payment_attempts",
+    "payment_webhook_events",
 }
 assert required.issubset(tables), f"Missing tables: {required - tables}"
 
@@ -108,6 +111,43 @@ connection.execute(
     "(id, account_id, product_key, plan_code, status, created_at, updated_at) "
     "VALUES ('s1', 'a1', 'steel', 'free', 'active', 'now', 'now')"
 )
+
+# Checkout is idempotent per account, and attempts/events retain provider references.
+connection.execute(
+    "INSERT INTO checkout_orders "
+    "(id, account_id, product_key, plan_code, order_type, status, amount, currency, idempotency_key, created_at, updated_at) "
+    "VALUES ('o1', 'a1', 'steel', 'free', 'subscription_purchase', 'pending_payment', 120000, 'IRR', 'checkout-1', 'now', 'now')"
+)
+connection.execute(
+    "INSERT INTO payment_attempts "
+    "(id, order_id, provider, status, amount, currency, provider_payment_ref, initiated_at, created_at, updated_at) "
+    "VALUES ('pa1', 'o1', 'provider-test', 'created', 120000, 'IRR', 'pay-ref-1', 'now', 'now', 'now')"
+)
+connection.execute(
+    "INSERT INTO payment_webhook_events "
+    "(id, provider, provider_event_id, event_type, payload_sha256, received_at) "
+    "VALUES ('wh1', 'provider-test', 'event-1', 'payment.succeeded', 'sha256-test', 'now')"
+)
+try:
+    connection.execute(
+        "INSERT INTO checkout_orders "
+        "(id, account_id, product_key, plan_code, order_type, amount, currency, idempotency_key, created_at, updated_at) "
+        "VALUES ('o2', 'a1', 'steel', 'free', 'subscription_purchase', 120000, 'IRR', 'checkout-1', 'now', 'now')"
+    )
+except sqlite3.IntegrityError:
+    pass
+else:
+    raise AssertionError("Duplicate account checkout idempotency key was accepted")
+try:
+    connection.execute(
+        "INSERT INTO payment_webhook_events "
+        "(id, provider, provider_event_id, event_type, payload_sha256, received_at) "
+        "VALUES ('wh2', 'provider-test', 'event-1', 'payment.succeeded', 'sha256-test', 'now')"
+    )
+except sqlite3.IntegrityError:
+    pass
+else:
+    raise AssertionError("Duplicate provider webhook event was accepted")
 
 # License secrets are represented by a unique hash, not the plaintext key.
 connection.execute(
