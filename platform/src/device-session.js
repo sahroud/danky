@@ -94,7 +94,9 @@ export async function handleDeviceSession(request, env, identity, productKey, re
     const deviceId = body.device_id;
     if (!validDeviceId(deviceId)) return json({ error: "valid_device_id_required" }, 400);
     const label = typeof body.device_label === "string" ? body.device_label.trim().slice(0, 80) : null;
-    const platform = typeof body.platform === "string" ? body.platform.trim().slice(0, 40) : null;
+    const allowedPlatforms = new Set(["android", "ios", "web", "windows", "macos", "linux", "other"]);
+    const requestedPlatform = typeof body.platform === "string" ? body.platform.trim().toLowerCase() : "other";
+    const platform = allowedPlatforms.has(requestedPlatform) ? requestedPlatform : "other";
     const result = await env.CORE_DB.prepare(
       "INSERT INTO account_product_devices (account_id,product_key,device_id,device_label,platform,status,first_seen_at,last_seen_at,created_at,updated_at) SELECT ?,?,?,?,?, 'active',?,?,?,? WHERE (SELECT COUNT(*) FROM account_product_devices WHERE account_id=? AND product_key=? AND status='active') < ? OR EXISTS (SELECT 1 FROM account_product_devices WHERE account_id=? AND product_key=? AND device_id=? AND status='active') ON CONFLICT(account_id,product_key,device_id) DO UPDATE SET device_label=excluded.device_label,platform=excluded.platform,last_seen_at=excluded.last_seen_at,updated_at=excluded.updated_at,status='active' WHERE account_product_devices.status='active' OR (SELECT COUNT(*) FROM account_product_devices WHERE account_id=? AND product_key=? AND status='active') < ? RETURNING device_id"
     ).bind(account.account_id, productKey, deviceId, label, platform, now, now, now, now,
@@ -109,7 +111,7 @@ export async function handleDeviceSession(request, env, identity, productKey, re
     const rows = await env.CORE_DB.prepare(
       "SELECT device_id,device_label,platform,status,first_seen_at,last_seen_at,revoked_at FROM account_product_devices WHERE account_id=? AND product_key=? ORDER BY last_seen_at DESC"
     ).bind(account.account_id, productKey).all();
-    return json({ devices: rows.results || [], max_devices: policy.maxDevicesPerAccount });
+    return json({ devices: rows.results || [] });
   }
 
   if (resource === "devices" && action === "revoke") {
