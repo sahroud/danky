@@ -37,7 +37,13 @@ async function verifyAssertion(token, secret, now, action) {
   let payload;
   try { payload = JSON.parse(decoder.decode(base64UrlDecode(parts[0]))); }
   catch { throw new Error("invalid_assertion_payload"); }
-  if (!payload || payload.action !== action || !ACTIONS.has(action) ||
+  const validId = value => typeof value === "string" && value.length > 0 && value.length <= 128;
+  const operationBindingValid =
+    (action === "acquire" && validId(payload?.requestId) && validId(payload?.leaseId)) ||
+    ((action === "heartbeat" || action === "release") && validId(payload?.leaseId)) ||
+    (action === "revoke" && validId(payload?.accountId) && validId(payload?.productKey)) ||
+    (action === "sweep" && validId(payload?.accountId) && validId(payload?.productKey));
+  if (!payload || payload.action !== action || !ACTIONS.has(action) || !operationBindingValid ||
       typeof payload.accountId !== "string" || !payload.accountId ||
       typeof payload.productKey !== "string" || !/^[a-z0-9-]{2,64}$/.test(payload.productKey) ||
       !Number.isSafeInteger(payload.expiresAt) || payload.expiresAt <= now ||
@@ -80,7 +86,9 @@ export class OperationCoordinatorDO {
       accountId: assertion.accountId, productKey: assertion.productKey,
       cap: assertion.cap, leaseSeconds: assertion.leaseSeconds,
       maxLifetimeSeconds: assertion.maxLifetimeSeconds,
-      queueLimit: assertion.queueLimit, maxWaitSeconds: assertion.maxWaitSeconds
+      queueLimit: assertion.queueLimit, maxWaitSeconds: assertion.maxWaitSeconds,
+      ...(action === "acquire" ? { requestId: assertion.requestId, leaseId: assertion.leaseId } : {}),
+      ...((action === "heartbeat" || action === "release") ? { leaseId: assertion.leaseId } : {})
     };
     try {
       const result = await this.ctx.storage.transaction(async transaction => {
