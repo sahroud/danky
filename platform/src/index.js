@@ -923,19 +923,21 @@ async function handle(request, env = {}) {
   } else if (request.method === "POST" && /^\/v1\/access\/[a-z0-9-]+\/[a-z0-9][a-z0-9._-]{1,80}\/consume$/.test(url.pathname)) {
     const parts = url.pathname.split("/");
     response = await consumeFeatureUsage(request, env, parts[3], parts[4]);
-  } else if (request.method === "GET" && /^\\/v1\\/devices\\/[a-z0-9-]+$/.test(url.pathname)) {
+  } else if (request.method === "GET" && /^\/v1\/devices\/[a-z0-9-]+$/.test(url.pathname)) {
     const parts = url.pathname.split("/");
     const identity = await verifyFirebaseIdToken(bearerToken(request), env);
     response = await handleDeviceSession(request, env, identity, parts[3], "devices", "list");
-  } else if (request.method === "POST" && /^\\/v1\\/devices\\/[a-z0-9-]+\\/(register|revoke)$/.test(url.pathname)) {
+  } else if (request.method === "POST" && /^\/v1\/devices\/[a-z0-9-]+\/(register|revoke)$/.test(url.pathname)) {
     const parts = url.pathname.split("/");
     const identity = await verifyFirebaseIdToken(bearerToken(request), env);
     response = await handleDeviceSession(request, env, identity, parts[3], "devices", parts[4]);
-  } else if (request.method === "POST" && /^\\/v1\\/sessions\\/[a-z0-9-]+\\/(open|heartbeat|close)$/.test(url.pathname)) {
+  } else if (request.method === "POST" && /^\/v1\/sessions\/[a-z0-9-]+\/(open|heartbeat|close)$/.test(url.pathname)) {
     const parts = url.pathname.split("/");
     const identity = await verifyFirebaseIdToken(bearerToken(request), env);
     response = await handleDeviceSession(request, env, identity, parts[3], "sessions", parts[4]);
-  } else if (request.method === "POST" && /^\\/v1\\/operations\\/[a-z0-9-]+\\/[a-z0-9][a-z0-9._-]{1,80}\\/(acquire|heartbeat|release)$/.test(url.pathname)) {
+  } else if (request.method === "POST" && /^\/v1\/operations\/[a-z0-9-]+\/[a-z0-9][a-z0-9._-]{1,80}\/(acquire|heartbeat|release)$/.test(url.pathname)) {
+    const parts = url.pathname.split("/");
+    response = await coordinateOperation(request, env, parts[3], parts[4], parts[5]);
   } else if (request.method === "GET" && url.pathname === "/v1/me") {
     response = await currentUser(request, env);
   } else if (url.pathname === "/v1/auth/session") {
