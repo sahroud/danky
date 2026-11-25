@@ -16,17 +16,36 @@ function purge(state, now) {
   }
 }
 
+function validatePolicy(input) {
+  const { cap, leaseSeconds, maxLifetimeSeconds, queueLimit = 0, maxWaitSeconds = 0 } = input;
+  return Number.isSafeInteger(cap) && cap >= 1 &&
+    Number.isSafeInteger(leaseSeconds) && leaseSeconds >= 1 &&
+    Number.isSafeInteger(maxLifetimeSeconds) && maxLifetimeSeconds >= leaseSeconds &&
+    Number.isSafeInteger(queueLimit) && queueLimit >= 0 &&
+    Number.isSafeInteger(maxWaitSeconds) && maxWaitSeconds >= 0;
+}
+
+function scopedRequestKey(accountId, productKey, requestId) {
+  return JSON.stringify([accountId, productKey, requestId]);
+}
+
+function leaseIdInUse(state, leaseId) {
+  return Boolean(state.leases[leaseId]) ||
+    Object.values(state.queue).some((entry) => entry.leaseId === leaseId);
+}
+
 function promote(state, now, cap, leaseSeconds, maxLifetimeSeconds) {
   while (Object.keys(state.leases).length < cap) {
     const next = Object.entries(state.queue)
       .sort((a, b) => a[1].sequence - b[1].sequence)[0];
     if (!next) break;
-    const [requestId, entry] = next;
-    delete state.queue[requestId];
+    const [requestKey, entry] = next;
+    delete state.queue[requestKey];
     if (entry.expiresAt <= now) continue;
     const leaseId = entry.leaseId;
     state.leases[leaseId] = {
-      leaseId, requestId, accountId: entry.accountId, productKey: entry.productKey,
+      leaseId, requestId: entry.requestId, requestKey,
+      accountId: entry.accountId, productKey: entry.productKey,
       createdAt: now, expiresAt: Math.min(now + leaseSeconds, entry.maxExpiresAt),
       maxExpiresAt: entry.maxExpiresAt
     };
@@ -34,16 +53,24 @@ function promote(state, now, cap, leaseSeconds, maxLifetimeSeconds) {
 }
 
 export function acquire(state, input) {
-  const { now, accountId, productKey, requestId, leaseId, cap, leaseSeconds,
-    maxLifetimeSeconds, queueLimit = 0, maxWaitSeconds = 0 } = input;
+  const { now, accountId, productKey, requestId, leaseId,
+    cap, leaseSeconds, maxLifetimeSeconds, queueLimit = 0, maxWaitSeconds = 0 } = input;
+  if (!Number.isSafeInteger(now) || typeof accountId !== "string" || !accountId ||
+      typeof productKey !== "string" || !productKey ||
+      typeof requestId !== "string" || !requestId ||
+      typeof leaseId !== "string" || !leaseId || !validatePolicy(input)) {
+    return { status: "denied", reason: "invalid_request_or_policy" };
+  }
   purge(state, now);
-  const existing = Object.values(state.leases).find(x => x.requestId === requestId);
+  const requestKey = scopedRequestKey(accountId, productKey, requestId);
+  const existing = Object.values(state.leases).find(x => x.requestKey === requestKey);
   if (existing) return { status: "granted", lease: { ...existing }, idempotent: true };
-  const queued = state.queue[requestId];
-  if (queued) return { status: "queued", position: queuePosition(state, requestId) };
+  const queued = state.queue[requestKey];
+  if (queued) return { status: "queued", position: queuePosition(state, requestKey) };
+  if (leaseIdInUse(state, leaseId)) return { status: "denied", reason: "lease_id_conflict" };
   if (Object.keys(state.leases).length < cap) {
     const lease = {
-      leaseId, requestId, accountId, productKey, createdAt: now,
+      leaseId, requestId, requestKey, accountId, productKey, createdAt: now,
       expiresAt: now + leaseSeconds, maxExpiresAt: now + maxLifetimeSeconds
     };
     state.leases[leaseId] = lease;
@@ -52,30 +79,41 @@ export function acquire(state, input) {
   if (Object.keys(state.queue).length >= queueLimit || maxWaitSeconds <= 0) {
     return { status: "denied", reason: "capacity_full" };
   }
-  state.queue[requestId] = {
-    requestId, leaseId, accountId, productKey, sequence: state.nextSequence++,
+  state.queue[requestKey] = {
+    requestId, requestKey, leaseId, accountId, productKey, sequence: state.nextSequence++,
     expiresAt: now + maxWaitSeconds, maxExpiresAt: now + maxLifetimeSeconds
   };
-  return { status: "queued", position: queuePosition(state, requestId) };
+  return { status: "queued", position: queuePosition(state, requestKey) };
 }
 
-function queuePosition(state, requestId) {
+function queuePosition(state, requestKey) {
   return Object.entries(state.queue)
     .sort((a, b) => a[1].sequence - b[1].sequence)
-    .findIndex(([id]) => id === requestId) + 1;
+    .findIndex(([key]) => key === requestKey) + 1;
 }
 
 export function heartbeat(state, input) {
   const { now, leaseId, leaseSeconds, maxLifetimeSeconds } = input;
+  if (!Number.isSafeInteger(now) || typeof leaseId !== "string" || !leaseId ||
+      !Number.isSafeInteger(leaseSeconds) || leaseSeconds < 1 ||
+      !Number.isSafeInteger(maxLifetimeSeconds) || maxLifetimeSeconds < 1) {
+    return { status: "invalid_request" };
+  }
   purge(state, now);
   const lease = state.leases[leaseId];
   if (!lease) return { status: "not_found" };
   lease.expiresAt = Math.min(now + leaseSeconds, lease.createdAt + maxLifetimeSeconds, lease.maxExpiresAt);
-  return { status: "renewed", lease: { ...lease } };
+  return lease.expiresAt <= now
+    ? { status: "max_lifetime" }
+    : { status: "renewed", lease: { ...lease } };
 }
 
 export function release(state, input) {
   const { now, leaseId, cap, leaseSeconds, maxLifetimeSeconds } = input;
+  if (!Number.isSafeInteger(now) || typeof leaseId !== "string" || !leaseId ||
+      !validatePolicy({ ...input, queueLimit: 0, maxWaitSeconds: 0 })) {
+    return { status: "invalid_request" };
+  }
   purge(state, now);
   const existed = Boolean(state.leases[leaseId]);
   delete state.leases[leaseId];
@@ -85,6 +123,12 @@ export function release(state, input) {
 
 export function revoke(state, input) {
   const { now, accountId, productKey, leaseId, cap, leaseSeconds, maxLifetimeSeconds } = input;
+  if (!Number.isSafeInteger(now) || !validatePolicy({ ...input, queueLimit: 0, maxWaitSeconds: 0 }) ||
+      (!leaseId && !accountId) ||
+      (accountId !== undefined && (typeof accountId !== "string" || !accountId)) ||
+      (productKey !== undefined && (typeof productKey !== "string" || !productKey))) {
+    return { status: "invalid_request", count: 0 };
+  }
   purge(state, now);
   let revoked = 0;
   for (const [id, lease] of Object.entries(state.leases)) {
@@ -99,6 +143,10 @@ export function revoke(state, input) {
 }
 
 export function expireAndPromote(state, input) {
+  if (!Number.isSafeInteger(input.now) ||
+      !validatePolicy({ ...input, queueLimit: 0, maxWaitSeconds: 0 })) {
+    return { active: Object.keys(state.leases).length, queued: Object.keys(state.queue).length, error: "invalid_policy" };
+  }
   purge(state, input.now);
   promote(state, input.now, input.cap, input.leaseSeconds, input.maxLifetimeSeconds);
   return { active: Object.keys(state.leases).length, queued: Object.keys(state.queue).length };
