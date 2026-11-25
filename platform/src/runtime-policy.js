@@ -34,21 +34,33 @@ function effectiveQueueLimit(productValue, accountValue) {
   return Math.min(product, account);
 }
 
+function effectiveDuration(productValue, accountValue, minimum, maximum, code) {
+  const product = productValue;
+  const account = accountValue ?? null;
+  if (!Number.isSafeInteger(product) || product < minimum || product > maximum ||
+      (account !== null && (!Number.isSafeInteger(account) || account < minimum || account > maximum))) {
+    throw new TypeError(code);
+  }
+  return account === null ? product : Math.min(product, account);
+}
+
 /**
- * Account overrides may tighten product policy but can never raise its ceilings.
- * A null product operation cap means the product has not enabled admission control;
- * callers must fail closed rather than inventing an unlimited or arbitrary cap.
+ * Account overrides may tighten but never raise product policy.
+ * Product and account operation caps remain separate for global vs per-account enforcement.
  */
 export function resolveEffectiveRuntimePolicy(productPolicy, accountOverride = null) {
   if (!productPolicy) throw new TypeError("product_runtime_policy_required");
-  const maxConcurrentOperations = effectiveCeiling(
-    productPolicy.max_concurrent_operations,
-    accountOverride?.max_concurrent_operations
-  );
-  if (maxConcurrentOperations === null) {
+
+  const productConcurrentCap = positiveOrNull(productPolicy.max_concurrent_operations);
+  if (productConcurrentCap === null) {
     throw Object.assign(new Error("runtime_policy_not_configured"), { code: "runtime_policy_not_configured" });
   }
+  if (productConcurrentCap === undefined) throw new TypeError("invalid_product_runtime_policy");
 
+  const accountConcurrentCap = effectiveCeiling(
+    productConcurrentCap,
+    accountOverride?.max_concurrent_operations
+  );
   const maxDevices = effectiveCeiling(
     productPolicy.max_devices_per_account,
     accountOverride?.max_devices_per_account
@@ -61,28 +73,38 @@ export function resolveEffectiveRuntimePolicy(productPolicy, accountOverride = n
     throw new TypeError("invalid_effective_session_policy");
   }
 
-  const leaseSeconds = productPolicy.session_lease_seconds;
-  const maxLifetimeSeconds = productPolicy.max_operation_lifetime_seconds;
-  const queueLimit = effectiveQueueLimit(
+  const sessionLeaseSeconds = effectiveDuration(
+    productPolicy.session_lease_seconds, null, 30, 86400, "invalid_product_session_lease"
+  );
+  const operationLeaseSeconds = effectiveDuration(
+    productPolicy.operation_lease_seconds,
+    accountOverride?.operation_lease_seconds,
+    30, 86400, "invalid_product_operation_lease"
+  );
+  const maxOperationLifetimeSeconds = effectiveDuration(
+    productPolicy.max_operation_lifetime_seconds,
+    accountOverride?.max_operation_lifetime_seconds,
+    operationLeaseSeconds, 604800, "invalid_product_operation_lifetime"
+  );
+  const maxQueuedOperations = effectiveQueueLimit(
     productPolicy.max_queued_operations,
     accountOverride?.max_queued_operations
   );
-  const maxWaitSeconds = productPolicy.queue_wait_seconds;
-
-  if (!Number.isSafeInteger(leaseSeconds) || leaseSeconds < 30 ||
-      !Number.isSafeInteger(maxLifetimeSeconds) || maxLifetimeSeconds < leaseSeconds ||
-      !Number.isSafeInteger(maxWaitSeconds) || maxWaitSeconds < 0) {
-    throw new TypeError("invalid_product_runtime_policy");
+  const queueWaitSeconds = productPolicy.queue_wait_seconds;
+  if (!Number.isSafeInteger(queueWaitSeconds) || queueWaitSeconds < 0 || queueWaitSeconds > 86400) {
+    throw new TypeError("invalid_product_queue_wait");
   }
 
   return Object.freeze({
     maxDevicesPerAccount: maxDevices,
     maxSessionsPerAccount: maxSessions,
-    maxConcurrentOperations: maxConcurrentOperations,
-    maxQueuedOperations: queueLimit,
-    sessionLeaseSeconds: leaseSeconds,
-    maxOperationLifetimeSeconds: maxLifetimeSeconds,
-    queueWaitSeconds: maxWaitSeconds
+    productConcurrentCap,
+    accountConcurrentCap,
+    maxQueuedOperations,
+    sessionLeaseSeconds,
+    operationLeaseSeconds,
+    maxOperationLifetimeSeconds,
+    queueWaitSeconds
   });
 }
 
@@ -93,13 +115,13 @@ export async function loadEffectiveRuntimePolicy(db, accountId, productKey) {
     throw new TypeError("invalid_runtime_policy_scope");
   }
   const productPolicy = await db.prepare(
-    "SELECT max_devices_per_account,max_sessions_per_account,operation_lease_seconds AS session_lease_seconds,max_concurrent_operations,max_queued_operations,queue_wait_seconds,max_operation_lifetime_seconds FROM product_runtime_policies WHERE product_key=?"
+    "SELECT max_devices_per_account,max_sessions_per_account,session_lease_seconds,max_concurrent_operations,max_queued_operations,queue_wait_seconds,operation_lease_seconds,max_operation_lifetime_seconds FROM product_runtime_policies WHERE product_key=?"
   ).bind(productKey).first();
   if (!productPolicy) {
     throw Object.assign(new Error("runtime_policy_not_configured"), { code: "runtime_policy_not_configured" });
   }
   const accountOverride = await db.prepare(
-    "SELECT max_devices_per_account,max_sessions_per_account,max_concurrent_operations,max_queued_operations FROM account_product_policy_overrides WHERE account_id=? AND product_key=?"
+    "SELECT max_devices_per_account,max_sessions_per_account,max_concurrent_operations,max_queued_operations,operation_lease_seconds,max_operation_lifetime_seconds FROM account_product_policy_overrides WHERE account_id=? AND product_key=?"
   ).bind(accountId, productKey).first();
   return resolveEffectiveRuntimePolicy(productPolicy, accountOverride);
 }
