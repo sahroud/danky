@@ -408,3 +408,24 @@ test("admin plan creation route requires Firebase authentication", async () => {
     /authentication_required/
   );
 });
+
+test("runtime policy admin endpoints require Firebase authentication", async () => {
+  const env = { CORE_DB: {} };
+  const product = await handle(request("/v1/admin/products/steel/runtime-policy"), env);
+  assert.equal(product.status, 401);
+  assert.equal((await product.json()).error, "authentication_required");
+
+  const account = await handle(request("/v1/admin/accounts/account-1/products/steel/runtime-policy", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      max_devices_per_account: 2,
+      max_sessions_per_account: 2,
+      max_concurrent_operations: 4,
+      max_queued_operations: 10
+    })
+  }), env);
+  assert.equal(account.status, 401);
+  assert.equal((await account.json()).error, "authentication_required");
+});
+
