@@ -158,11 +158,10 @@ assert mapped_features == 1, "Active product plans must map to included features
 print("SAHROUD Central schema tests passed")
 
 
-# Exercise the exact conditional UPSERT against SQLite using independent connections.
-# Keep a bounded worker count: SQLite serializes writers, so 40 simultaneous writers
-# add lock contention without improving coverage of the atomic limit condition.
-from concurrent.futures import ThreadPoolExecutor
-import tempfile
+# Exercise the exact conditional UPSERT against SQLite with independent connections.
+# SQLite serializes writers; deterministic sequential attempts validate the SQL cap here.
+# The Cloudflare D1 test separately covers concurrent consume requests.
+from tempfile import TemporaryDirectory
 
 usage_upsert = """
 INSERT INTO feature_usage
@@ -177,22 +176,20 @@ WHERE (? IS NULL OR feature_usage.used_count < ?)
 RETURNING used_count
 """
 
-with tempfile.TemporaryDirectory() as temp_dir:
-    db_path = Path(temp_dir) / "central-concurrency.sqlite"
+with TemporaryDirectory() as temp_dir:
+    db_path = Path(temp_dir) / "central-usage.sqlite"
     with sqlite3.connect(db_path) as seed:
         connection.backup(seed)
 
-    def attempt_consume(_):
-        with sqlite3.connect(db_path, timeout=10, isolation_level=None) as db:
+    outcomes = []
+    for _ in range(40):
+        with sqlite3.connect(db_path, timeout=10) as db:
             db.execute("PRAGMA busy_timeout = 10000")
-            return db.execute(
+            outcomes.append(db.execute(
                 usage_upsert,
                 ("a1", "steel", "dxf-export", "2026-11-24T00:00:00Z",
                  "2026-11-24T00:00:00Z", 5, 5, 5, 5),
-            ).fetchone()
-
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        outcomes = list(pool.map(attempt_consume, range(40)))
+            ).fetchone())
 
     accepted = [row[0] for row in outcomes if row is not None]
     rejected = sum(row is None for row in outcomes)
@@ -209,4 +206,4 @@ with tempfile.TemporaryDirectory() as temp_dir:
     assert final_count == 5, f"Usage counter exceeded or missed limit: {final_count}"
     assert sorted(accepted) == [3, 4, 5], f"Unexpected returned counts: {accepted}"
 
-print("SAHROUD Central SQLite concurrent usage test passed")
+print("SAHROUD Central SQLite usage limit test passed")
