@@ -11,8 +11,14 @@ const policy = {
 function storageHarness() {
   const data = new Map();
   let chain = Promise.resolve();
+  let alarmAt = null;
   return {
     data,
+    async get(key) { return data.get(key); },
+    async put(key, value) { data.set(key, structuredClone(value)); },
+    async setAlarm(timestamp) { alarmAt = timestamp; },
+    async getAlarm() { return alarmAt; },
+    async deleteAlarm() { alarmAt = null; },
     async transaction(callback) {
       const run = chain.then(async () => callback({
         get: async key => data.get(key),
