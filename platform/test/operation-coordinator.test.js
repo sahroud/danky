@@ -100,3 +100,14 @@ test("account/product revocation also cancels queued requests in that scope", ()
   assert.equal(Object.keys(state.leases).length, 0);
   assert.equal(Object.keys(state.queue).length, 0);
 });
+
+test("per-account cap is enforced independently from the product-wide cap", () => {
+  const state = emptyCoordinatorState();
+  const shared = { ...policy, cap: 3, accountCap: 1 };
+  assert.equal(acquire(state, { ...request("a1"), ...shared, accountId: "acct-a" }).status, "granted");
+  assert.equal(acquire(state, { ...request("a2"), ...shared, accountId: "acct-a" }).status, "queued");
+  assert.equal(acquire(state, { ...request("b1"), ...shared, accountId: "acct-b" }).status, "granted");
+  assert.equal(Object.keys(state.leases).length, 2);
+  release(state, { ...shared, now: 105, accountId: "acct-a", productKey: "steel", leaseId: "lease-a1" });
+  assert.equal(state.leases["lease-a2"].accountId, "acct-a");
+});
