@@ -14,7 +14,7 @@ Keep these independent:
 - Registered devices per account/product.
 - Active authenticated sessions per account/product.
 - Active heavy operations per product (global product capacity).
-- Active heavy operations per account/product (fairness and account-level caps).
+- Active heavy operations per account/product (fairness and account-level caps). The deterministic coordinator now enforces a signed per-account cap independently of the product-wide cap; each queued request retains the account cap that was signed when it entered the queue.
 - Bounded waiting queue and maximum wait duration.
 
 A device registration is not a session, and a session is not an operation permit. Do not treat a client-supplied device label or fingerprint as proof of device identity.
@@ -51,7 +51,7 @@ Keep session_lease_seconds distinct from operation permit duration. Migration 00
 
 ## Implementation gates
 
-1. Coordinator state machine and an internal DO class are implemented on the feature branch. Wrangler binding and SQLite migration are declared only to provision local test runtime; no public Worker route invokes the namespace. Do not deploy or run remote migrations.
+1. Coordinator state machine and an internal DO class are implemented on the feature branch. The state machine enforces both product-wide capacity and per-account capacity within a product-scoped coordinator. Queue entries preserve their own account cap so one account's override cannot change another account's queued admission. Wrangler binding and SQLite migration are declared only to provision local test runtime; no public Worker route invokes the namespace. Do not deploy or run remote migrations.
 2. Cloudflare-runtime Vitest tests cover actual DO storage transactions, persistence across stubs, concurrent capacity, FIFO promotion, heartbeat, release, scope mismatch, and bad signatures. Alarm-based cleanup now stores the effective coordinator policy, schedules the earliest lease/queue deadline, expires leases and promotes waiters in `alarm()`, then schedules the next deadline. The alarm test forces an expired lease and invokes the scheduled alarm with the Cloudflare test helper. The Node-only storage harness also implements the storage alarm methods so legacy unit tests continue to exercise the coordinator without a real runtime.
 3. Add a worker-side policy resolver and signed assertion; test malformed/missing/stale assertions.
 4. Add a test-only adapter for product backends and demonstrate permit release in finally.
