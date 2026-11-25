@@ -30,9 +30,12 @@ test("queue is bounded and promotes FIFO after release", () => {
 test("heartbeat cannot extend beyond the lease's maximum lifetime", () => {
   const state = emptyCoordinatorState();
   acquire(state, request("one"));
-  const result = heartbeat(state, { ...policy, now: 170, leaseId: "lease-one" });
+  const result = heartbeat(state, { ...policy, now: 120, leaseId: "lease-one" });
   assert.equal(result.status, "renewed");
-  assert.equal(result.lease.expiresAt, 190);
+  assert.equal(result.lease.expiresAt, 150);
+  const bounded = heartbeat(state, { ...policy, now: 185, leaseId: "lease-one" });
+  assert.equal(bounded.status, "renewed");
+  assert.equal(bounded.lease.expiresAt, 190);
 });
 
 test("expired leases are removed and queued requests can be promoted", () => {
