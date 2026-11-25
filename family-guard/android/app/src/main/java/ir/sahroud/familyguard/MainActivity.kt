@@ -38,6 +38,7 @@ class MainActivity : Activity() {
     private lateinit var healthText: TextView
     private lateinit var waterText: TextView
     private lateinit var reportText: TextView
+    private lateinit var familyStatusText: TextView
     private var totalDistance = 0f
     private var routePoints = mutableListOf<String>()
     private var todaySteps = 0
@@ -98,7 +99,9 @@ class MainActivity : Activity() {
         root.addView(body("اتصال فقط با کد دعوت والد و تأیید آگاهانه صاحب همین گوشی انجام می‌شود. پس از اتصال، ارسال موقعیت فقط هنگام فعال بودن ثبت مسیر و نمایش اعلان انجام می‌شود."))
         root.addView(action("اتصال این گوشی به خانواده با کد دعوت") { pairDevice() })
         root.addView(action("قطع اشتراک‌گذاری و خروج از خانواده") { stopFamilySharing() })
-        root.addView(body("وضعیت اتصال: ${if (DeviceCredentials.get(this).getString("device_token", null).isNullOrBlank()) "متصل نیست" else "دارای کلید اتصال"}"))
+        familyStatusText = body("")
+        root.addView(familyStatusText)
+        refreshFamilyStatus()
 
         root.addView(heading("۲) گام‌شمار و فعالیت روزانه"))
         stepsText = body("در حال آماده‌سازی حسگر گام‌شمار…")
@@ -210,6 +213,7 @@ class MainActivity : Activity() {
                             .apply()
                         runOnUiThread {
                             Toast.makeText(this, "این گوشی با رضایت شما به خانواده متصل شد.", Toast.LENGTH_LONG).show()
+                            refreshFamilyStatus()
                             restoreRouteDisplay()
                         }
                         connection.disconnect()
@@ -220,13 +224,29 @@ class MainActivity : Activity() {
             }.show()
     }
 
+    private fun refreshFamilyStatus() {
+        if (!::familyStatusText.isInitialized) return
+        val secure = DeviceCredentials.get(this)
+        val connected = !secure.getString("device_token", null).isNullOrBlank()
+        val uploadError = prefs.getString("family_upload_error", null)
+        familyStatusText.text = if (connected) {
+            "وضعیت اتصال: متصل به خانواده | اشتراک‌گذاری فقط هنگام فعال بودن ثبت مسیر انجام می‌شود." +
+                if (uploadError.isNullOrBlank()) "" else "\\nآخرین خطای ارسال: $uploadError"
+        } else {
+            "وضعیت اتصال: متصل نیست"
+        }
+    }
+
     private fun stopFamilySharing() {
+        // Stop local collection immediately, even if the network is unavailable.
+        stopTracking()
         val secure = DeviceCredentials.get(this)
         val token = secure.getString("device_token", null)
         val api = prefs.getString("family_api_url", null)
         if (token.isNullOrBlank() || api.isNullOrBlank()) {
             secure.edit().clear().apply()
-            Toast.makeText(this, "اتصال خانوادگی روی این گوشی وجود نداشت.", Toast.LENGTH_SHORT).show()
+            refreshFamilyStatus()
+            Toast.makeText(this, "اشتراک‌گذاری محلی متوقف شد؛ اتصال فعالی برای لغو در سرور پیدا نشد.", Toast.LENGTH_SHORT).show()
             return
         }
         Thread {
@@ -242,7 +262,10 @@ class MainActivity : Activity() {
                 if (connection.responseCode !in 200..299) throw IllegalStateException("HTTP ${connection.responseCode}")
                 connection.disconnect()
                 secure.edit().clear().apply()
-                runOnUiThread { Toast.makeText(this, "اشتراک‌گذاری در سرور متوقف و کلید این گوشی پاک شد.", Toast.LENGTH_LONG).show() }
+                runOnUiThread {
+                    refreshFamilyStatus()
+                    Toast.makeText(this, "اشتراک‌گذاری در سرور متوقف و کلید این گوشی پاک شد.", Toast.LENGTH_LONG).show()
+                }
             } catch (e: Exception) {
                 runOnUiThread { Toast.makeText(this, "توقف در سرور انجام نشد: ${e.message}", Toast.LENGTH_LONG).show() }
             }
@@ -290,7 +313,8 @@ class MainActivity : Activity() {
         stopTracking()
         totalDistance = 0f
         routePoints.clear()
-        prefs.edit().putFloat("route_distance", 0f).putString("route_points", "").apply()
+        prefs.edit().putFloat("route_distance", 0f).putString("route_points", "")
+            .remove("last_lat").remove("last_lon").remove("last_location_time").apply()
         distanceText.text = "مسافت این نوبت: ۰ متر | نقاط مسیر: ۰"
         locationText.text = "مسیر پاک شد."
     }
