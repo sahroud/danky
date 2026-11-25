@@ -399,3 +399,11 @@ test("CORS preflight advertises PATCH for grant administration", async () => {
   assert.equal(response.status, 204);
   assert.equal(response.headers.get("access-control-allow-methods"), "GET, POST, PATCH, OPTIONS");
 });
+
+
+test("admin plan creation route requires Firebase authentication", async () => {
+  await assert.rejects(
+    handle(request("/v1/admin/products/steel/plans", { method: "POST", body: JSON.stringify({ plan_code: "pro", display_name: "Pro", feature_keys: ["dxf-export"] }) }), { FIREBASE_PROJECT_ID: "sahroud-central-test" }),
+    /authentication_required/
+  );
+});
