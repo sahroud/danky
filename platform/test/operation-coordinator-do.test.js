@@ -4,7 +4,7 @@ import { OperationCoordinatorDO, signCoordinatorAssertion } from "../src/operati
 
 const secret = "test-only-secret-with-at-least-32-characters";
 const policy = {
-  accountId: "account-1", productKey: "steel", cap: 1,
+  accountId: "account-1", productKey: "steel", cap: 1, accountCap: 1,
   leaseSeconds: 30, maxLifetimeSeconds: 90, queueLimit: 2,
   maxWaitSeconds: 60, expiresAt: Math.floor(Date.now() / 1000) + 120
 };
