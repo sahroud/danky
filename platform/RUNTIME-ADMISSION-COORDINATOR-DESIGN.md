@@ -60,3 +60,11 @@ Keep session_lease_seconds distinct from operation permit duration. Migration 00
 7. Review Wrangler migration syntax and local binding behavior before any remote operation. Remote deployment and migration require separate explicit approval.
 
 Do not set production concurrency caps until representative load tests are complete.
+
+## Device/session lifecycle boundary
+
+Device registration and session lifecycle are separate from operation admission. The Worker authenticates Firebase identity, resolves active account membership, and loads device/session policy independently from operation concurrency policy. Device and session ceilings are separate values; account overrides may tighten but cannot raise product policy.
+
+The session-open statement conditionally inserts only when the installation is active and the account has fewer active, unexpired sessions than its configured cap. The returned 256-bit opaque token is shown once; the database stores only its SHA-256 hex digest. Heartbeats extend expiry only for an active, unexpired session attached to an active device. Closing a session revokes it, and revoking a device also revokes its active sessions.
+
+Device IDs represent app installations, not proven physical hardware. Hardware attestation is not implemented. Missing device/session caps fail closed. This lifecycle is branch code only; no deployment or remote database migration has been performed, and product adapters remain pending.
