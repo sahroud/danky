@@ -4,7 +4,7 @@ import { runInDurableObject, runDurableObjectAlarm } from "cloudflare:test";
 import { signCoordinatorAssertion } from "../src/operation-coordinator-do.js";
 
 const secret = "local-test-secret-not-for-production-000000000000";
-const base = { accountId: "runtime-test-account", productKey: "steel", cap: 2,
+const base = { accountId: "runtime-test-account", productKey: "steel", cap: 2, accountCap: 2,
   leaseSeconds: 60, maxLifetimeSeconds: 180, queueLimit: 10, maxWaitSeconds: 90 };
 const stub = label => env.OPERATION_COORDINATOR.get(
   env.OPERATION_COORDINATOR.idFromName("runtime-" + label + "-" + crypto.randomUUID())
@@ -34,6 +34,21 @@ describe("Durable Object coordinator in Cloudflare runtime", () => {
     const results = await Promise.all(responses.map(r => r.json()));
     expect(results.filter(x => x.status === "granted")).toHaveLength(2);
     expect(results.filter(x => x.status === "queued")).toHaveLength(10);
+  });
+
+  it("enforces per-account caps without wasting product-wide capacity", async () => {
+    const object = stub("account-cap");
+    const policy = { cap: 2, accountCap: 1, queueLimit: 4 };
+    const first = await token("acquire", { accountId: "account-a", requestId: "a1", leaseId: "la1" }, policy);
+    const second = await token("acquire", { accountId: "account-a", requestId: "a2", leaseId: "la2" }, policy);
+    const other = await token("acquire", { accountId: "account-b", requestId: "b1", leaseId: "lb1" }, policy);
+    expect((await (await call(object, "acquire", first)).json()).status).toBe("granted");
+    expect((await (await call(object, "acquire", second)).json()).status).toBe("queued");
+    expect((await (await call(object, "acquire", other)).json()).status).toBe("granted");
+    const release = await token("release", { accountId: "account-b", leaseId: "lb1" }, policy);
+    expect((await (await call(object, "release", release)).json()).existed).toBe(true);
+    const retry = await token("acquire", { accountId: "account-a", requestId: "a2", leaseId: "la2" }, policy);
+    expect((await (await call(object, "acquire", retry)).json()).status).toBe("granted");
   });
 
   it("persists state and scopes heartbeat/release to the signed account", async () => {
