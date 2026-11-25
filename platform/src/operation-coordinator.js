@@ -43,7 +43,7 @@ function promote(state, now, cap, accountCap, leaseSeconds, maxLifetimeSeconds) 
   while (Object.keys(state.leases).length < cap) {
     const next = Object.entries(state.queue)
       .sort((a, b) => a[1].sequence - b[1].sequence)
-      .find(([, entry]) => activeForAccount(state, entry.accountId) < Math.min(cap, accountCap));
+      .find(([, entry]) => activeForAccount(state, entry.accountId) < Math.min(cap, entry.accountCap ?? accountCap));
     if (!next) break;
     const [requestKey, entry] = next;
     delete state.queue[requestKey];
@@ -87,7 +87,7 @@ export function acquire(state, input) {
     return { status: "denied", reason: "capacity_full" };
   }
   state.queue[requestKey] = {
-    requestId, requestKey, leaseId, accountId, productKey, sequence: state.nextSequence++,
+    requestId, requestKey, leaseId, accountId, productKey, accountCap, sequence: state.nextSequence++,
     expiresAt: now + maxWaitSeconds, maxExpiresAt: now + maxLifetimeSeconds
   };
   return { status: "queued", position: queuePosition(state, requestKey) };
