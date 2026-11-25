@@ -308,7 +308,7 @@ test("grant lookup enforces start and end timestamps using the same current inst
   assert.match(grantQuery.sql, /starts_at IS NULL OR starts_at<=\?/);
   assert.match(grantQuery.sql, /ends_at IS NULL OR ends_at>\?/);
   assert.equal(grantQuery.args[3], grantQuery.args[4]);
-  assert.match(db.queries.find(q => q.sql.includes("FROM subscriptions")).sql, /starts_at IS NULL OR s.starts_at<=\?/);
+  assert.match(db.queries.find(q => q.sql.includes("FROM subscriptions")).sql, /s.starts_at IS NULL OR s.starts_at<=\?/);
 });
 
 test("subscription lookup enforces start, end, and active plan status", async () => {
@@ -410,7 +410,7 @@ test("admin plan creation route requires Firebase authentication", async () => {
 });
 
 test("runtime policy admin endpoints require Firebase authentication", async () => {
-  const env = { CORE_DB: {} };
+  const env = { CORE_DB: {}, FIREBASE_PROJECT_ID: "sahroud-central-test" };
   const product = await handle(request("/v1/admin/products/steel/runtime-policy"), env);
   assert.equal(product.status, 401);
   assert.equal((await product.json()).error, "authentication_required");
@@ -428,4 +428,3 @@ test("runtime policy admin endpoints require Firebase authentication", async () 
   assert.equal(account.status, 401);
   assert.equal((await account.json()).error, "authentication_required");
 });
-
