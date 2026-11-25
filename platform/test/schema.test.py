@@ -178,6 +178,9 @@ RETURNING used_count
 
 with TemporaryDirectory() as temp_dir:
     db_path = Path(temp_dir) / "central-usage.sqlite"
+    # Finish the in-memory schema/data transaction before SQLite backup.
+    # An uncommitted source transaction can leave backup waiting indefinitely.
+    connection.commit()
     with sqlite3.connect(db_path) as seed:
         connection.backup(seed)
 
