@@ -1,18 +1,6 @@
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
-
-const usageUpsert = `
-INSERT INTO feature_usage
-  (account_id, product_key, feature_key, used_count, created_at, updated_at)
-SELECT ?, ?, ?, 1, ?, ?
-WHERE (? IS NULL OR ? > 0)
-ON CONFLICT(account_id, product_key, feature_key)
-DO UPDATE SET
-  used_count = feature_usage.used_count + 1,
-  updated_at = excluded.updated_at
-WHERE (? IS NULL OR feature_usage.used_count < ?)
-RETURNING used_count
-`;
+import { incrementFeatureUsage } from "../src/index.js";
 
 describe("Cloudflare D1 usage enforcement", () => {
   beforeAll(async () => {
@@ -40,17 +28,21 @@ describe("Cloudflare D1 usage enforcement", () => {
     await env.CORE_DB.exec("DROP TABLE IF EXISTS feature_usage");
   });
 
-  it("accepts only the remaining three of forty concurrent consumes", async () => {
+  it("enforces the remaining three uses through the real Worker usage function under concurrency", async () => {
     const now = new Date().toISOString();
-    const attempts = Array.from({ length: 40 }, () =>
-      env.CORE_DB.prepare(usageUpsert)
-        .bind("test-account", "steel", "dxf-export", now, now, 5, 5, 5, 5)
-        .first()
-    );
+    const access = {
+      account: { account_id: "test-account" },
+      limit: 5,
+      usedCount: 2
+    };
 
-    const outcomes = await Promise.all(attempts);
-    const accepted = outcomes.filter(Boolean).map(row => row.used_count);
-    const rejected = outcomes.filter(row => row === null).length;
+    // Exercise the production function, not a copy of its SQL, against local Miniflare D1.
+    const outcomes = await Promise.all(Array.from({ length: 40 }, () =>
+      incrementFeatureUsage(env, access, "steel", "dxf-export", now)
+    ));
+
+    const accepted = outcomes.filter(result => result.consumed).map(result => result.usedCount);
+    const rejected = outcomes.filter(result => !result.consumed).length;
     const finalRow = await env.CORE_DB.prepare(
       "SELECT used_count FROM feature_usage WHERE account_id=? AND product_key=? AND feature_key=?"
     ).bind("test-account", "steel", "dxf-export").first();
