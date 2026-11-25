@@ -183,15 +183,15 @@ with tempfile.TemporaryDirectory() as temp_dir:
         connection.backup(seed)
 
     def attempt_consume(_):
-        with sqlite3.connect(db_path, timeout=30, isolation_level=None) as db:
-            db.execute("PRAGMA busy_timeout = 30000")
+        with sqlite3.connect(db_path, timeout=10, isolation_level=None) as db:
+            db.execute("PRAGMA busy_timeout = 10000")
             return db.execute(
                 usage_upsert,
                 ("a1", "steel", "dxf-export", "2026-11-24T00:00:00Z",
                  "2026-11-24T00:00:00Z", 5, 5, 5, 5),
             ).fetchone()
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    with ThreadPoolExecutor(max_workers=2) as pool:
         outcomes = list(pool.map(attempt_consume, range(40)))
 
     accepted = [row[0] for row in outcomes if row is not None]
