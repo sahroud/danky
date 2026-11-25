@@ -1,6 +1,6 @@
 # Runtime Admission Coordinator Design
 
-Status: Durable Object class, signed assertions, local Cloudflare-runtime tests, and alarm-based lease cleanup are implemented on the feature branch. The Wrangler namespace binding and SQLite class migration are declared for local/runtime testing only. Worker-side policy resolver/signer, product-backend integration, and deployment remain disabled/not implemented. No deployment or remote migration has occurred.
+Status: Durable Object class, signed assertions, local Cloudflare-runtime tests, alarm-based lease cleanup, Worker-side policy resolver/signer, and authenticated Worker acquire/heartbeat/release routes are implemented on the feature branch. Product-backend adapters and device/session lifecycle remain incomplete. Wrangler namespace binding and SQLite class migration are for local/runtime testing only. No deployment or remote migration has occurred.
 
 ## Safety boundary
 
@@ -15,13 +15,13 @@ Keep these independent:
 - Active authenticated sessions per account/product.
 - Active heavy operations per product (global product capacity).
 - Active heavy operations per account/product (fairness and account-level caps). The deterministic coordinator now enforces a signed per-account cap independently of the product-wide cap; each queued request retains the account cap that was signed when it entered the queue.
-- Bounded waiting queue and maximum wait duration.
+- Bounded waiting queue and maximum wait duration, with separate product-wide and per-account queue ceilings.
 
 A device registration is not a session, and a session is not an operation permit. Do not treat a client-supplied device label or fingerprint as proof of device identity.
 
 ## Coordinator placement
 
-Use a Durable Object with serialized state transitions. A deterministic, opaque DO name is derived by the Worker from the scope (for example, product scope for global capacity and account+product scope for account limits). Never accept arbitrary DO names from clients.
+Use a Durable Object with serialized state transitions. A deterministic DO name is derived by the Worker from the product key. This single product-scoped object enforces the product-wide cap across all accounts while tracking each account's own cap and queue ceiling. Never accept arbitrary DO names from clients.
 
 The Worker should load and validate the product policy and account override from Central D1, resolve plan-level caps, and pass a short-lived, signed internal assertion to the coordinator. The assertion should bind the operation, account, product, policy version, limits, expiry, and request nonce. The DO must validate the signature and scope before changing state. Do not trust client-provided limits or account identifiers.
 
@@ -53,9 +53,10 @@ Keep session_lease_seconds distinct from operation permit duration. Migration 00
 
 1. Coordinator state machine and an internal DO class are implemented on the feature branch. The state machine enforces both product-wide capacity and per-account capacity within a product-scoped coordinator. Queue entries preserve their own account cap so one account's override cannot change another account's queued admission. Wrangler binding and SQLite migration are declared only to provision local test runtime; no public Worker route invokes the namespace. Do not deploy or run remote migrations.
 2. Cloudflare-runtime Vitest tests cover actual DO storage transactions, persistence across stubs, concurrent capacity, FIFO promotion, heartbeat, release, scope mismatch, and bad signatures. Alarm-based cleanup now stores the effective coordinator policy, schedules the earliest lease/queue deadline, expires leases and promotes waiters in `alarm()`, then schedules the next deadline. The alarm test forces an expired lease and invokes the scheduled alarm with the Cloudflare test helper. The Node-only storage harness also implements the storage alarm methods so legacy unit tests continue to exercise the coordinator without a real runtime.
-3. Add a worker-side policy resolver and signed assertion; test malformed/missing/stale assertions.
-4. Add a test-only adapter for product backends and demonstrate permit release in finally.
-5. Run API tests, schema tests, and local D1/DO tests in CI.
-6. Review Wrangler migration syntax and local binding behavior before any remote operation. Remote deployment and migration require separate explicit approval.
+3. Worker-side policy resolver, signed assertions, and authenticated acquire/heartbeat/release routes are implemented and tested. Product-wide and account-specific concurrency/queue caps are resolved separately.
+4. Add adapters to STEEL, UTM, TASBIH and other product backends; demonstrate permit release in finally and heartbeat for long-running work.
+5. Implement registered-device and authenticated-session lifecycle separately from operation permits.
+6. Run API tests, schema tests, and local D1/DO tests in CI.
+7. Review Wrangler migration syntax and local binding behavior before any remote operation. Remote deployment and migration require separate explicit approval.
 
 Do not set production concurrency caps until representative load tests are complete.
