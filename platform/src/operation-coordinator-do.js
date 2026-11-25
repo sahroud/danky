@@ -64,6 +64,9 @@ export class OperationCoordinatorDO {
     try { body = await request.json(); }
     catch { return json({ error: "invalid_json" }, 400); }
     const action = body?.action;
+    if (typeof this.env?.OPERATION_ASSERTION_SECRET !== "string" || this.env.OPERATION_ASSERTION_SECRET.length < 32) {
+      return json({ error: "coordinator_not_configured" }, 503);
+    }
     const now = Math.floor(Date.now() / 1000);
     let assertion;
     try { assertion = await verifyAssertion(body?.assertion, this.env?.OPERATION_ASSERTION_SECRET, now, action); }
