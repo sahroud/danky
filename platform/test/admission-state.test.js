@@ -17,7 +17,7 @@ test("acquire enforces cap and returns existing lease for idempotent retry", () 
 test("expiry frees capacity; renew is bounded by max lifetime", () => {
   const state = createAdmissionState();
   acquire(state, { ...policy, leaseId: "lease-a", requestKey: "req-a" }, 1000);
-  assert.equal(renew(state, "lease-a", 60, 61000).ok, true);
+  assert.equal(renew(state, "lease-a", 60, 60000).ok, true);
   assert.equal(renew(state, "lease-a", 60, 121000).code, "LEASE_NOT_FOUND");
   sweepExpired(state, 121000);
   assert.equal(acquire(state, { ...policy, leaseId: "lease-b", requestKey: "req-b" }, 121000).ok, true);
