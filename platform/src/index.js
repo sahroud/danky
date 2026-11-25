@@ -1,4 +1,6 @@
 import { importX509, jwtVerify } from "jose";
+import { loadEffectiveRuntimePolicy } from "./runtime-policy.js";
+import { signCoordinatorAssertion } from "./operation-coordinator-do.js";
 
 const API_VERSION = "0.3.0";
 const FIREBASE_CERTS_URL = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
@@ -739,6 +741,109 @@ async function consumeFeatureUsage(request, env, productKey, featureKey) {
     return json({ allowed: false, reason: "usage_limit_reached", used_count: usage.usedCount, usage_limit: access.limit }, 403);
   }
   return json({ allowed: true, consumed: true, product_key: productKey, feature_key: featureKey, access_source: access.source, used_count: usage.usedCount, usage_limit: access.limit, remaining_uses: access.limit == null ? null : Math.max(0, access.limit - usage.usedCount) });
+}
+
+/**
+ * Acquires or manages a product-wide operation permit.
+ * The Durable Object id is product-scoped so its cap is shared across accounts.
+ * Identity, account membership, entitlements and all limits are resolved server-side.
+ */
+async function coordinateOperation(request, env, productKey, featureKey, action) {
+  const identity = await verifyFirebaseIdToken(bearerToken(request), env);
+  let account;
+  let body;
+  try { body = await request.json(); }
+  catch { return json({ error: "invalid_json" }, 400); }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return json({ error: "invalid_request_body" }, 400);
+  }
+
+  if (action === "release") {
+    // Release is allowed for an authenticated account member even if its subscription
+    // has since expired; otherwise a client could not voluntarily free its own permit.
+    account = await requireCentralAccount(env, identity, request.headers.get("X-Sahroud-Account-Id"));
+  } else {
+    const access = await resolveFeatureAccess(request, env, identity, productKey, featureKey);
+    if (access.response) return access.response;
+    account = access.account;
+  }
+
+  if (!env?.OPERATION_COORDINATOR ||
+      typeof env.OPERATION_COORDINATOR.idFromName !== "function" ||
+      typeof env.OPERATION_COORDINATOR.get !== "function") {
+    return json({ error: "operation_coordinator_not_configured" }, 503);
+  }
+  const secret = env.OPERATION_ASSERTION_SECRET;
+  if (typeof secret !== "string" || secret.length < 32) {
+    return json({ error: "operation_assertion_secret_not_configured" }, 503);
+  }
+
+  let requestId;
+  let leaseId;
+  if (action === "acquire") {
+    requestId = body.request_id;
+    if (typeof requestId !== "string" || !/^[A-Za-z0-9._:-]{8,128}$/.test(requestId)) {
+      return json({ error: "valid_request_id_required" }, 400);
+    }
+    leaseId = crypto.randomUUID();
+  } else {
+    leaseId = body.lease_id;
+    if (typeof leaseId !== "string" || !/^[A-Za-z0-9._:-]{8,128}$/.test(leaseId)) {
+      return json({ error: "valid_lease_id_required" }, 400);
+    }
+  }
+
+  let policy;
+  try {
+    policy = await loadEffectiveRuntimePolicy(env.CORE_DB, account.account_id, productKey);
+  } catch (error) {
+    if (error?.code === "runtime_policy_not_configured") {
+      return json({ error: "runtime_policy_not_configured" }, 503);
+    }
+    return json({ error: "runtime_policy_invalid" }, 503);
+  }
+
+  const assertion = {
+    action,
+    accountId: account.account_id,
+    productKey,
+    cap: policy.productConcurrentCap,
+    accountCap: policy.accountConcurrentCap,
+    leaseSeconds: policy.operationLeaseSeconds,
+    maxLifetimeSeconds: policy.maxOperationLifetimeSeconds,
+    queueLimit: policy.productQueueLimit,
+    accountQueueLimit: policy.accountQueueLimit,
+    maxWaitSeconds: policy.queueWaitSeconds,
+    expiresAt: Math.floor(Date.now() / 1000) + 60,
+    ...(action === "acquire" ? { requestId, leaseId } : { leaseId })
+  };
+  let signed;
+  try { signed = await signCoordinatorAssertion(assertion, secret); }
+  catch { return json({ error: "operation_assertion_signing_failed" }, 503); }
+
+  try {
+    // One coordinator per product enforces the global cap across all accounts.
+    const id = env.OPERATION_COORDINATOR.idFromName(productKey);
+    const stub = env.OPERATION_COORDINATOR.get(id);
+    const response = await stub.fetch("https://coordinator.internal/operation", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action, assertion: signed, input: {} })
+    });
+    const result = await response.json();
+    if (!response.ok) return json({ error: result?.error || "operation_coordinator_failed" }, response.status);
+    const status = action === "acquire" && result?.status === "denied" ? 409
+      : action === "heartbeat" && result?.status === "not_found" ? 404
+        : 200;
+    return json({
+      ...result,
+      product_key: productKey,
+      feature_key: featureKey,
+      ...(action === "acquire" ? { request_id: requestId } : {})
+    }, status);
+  } catch {
+    return json({ error: "operation_coordinator_unavailable" }, 503);
+  }
 }
 
 async function handle(request, env = {}) {
