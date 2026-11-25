@@ -45,9 +45,12 @@ describe("Durable Object coordinator in Cloudflare runtime", () => {
     expect((await (await call(object, "acquire", first)).json()).status).toBe("granted");
     expect((await (await call(object, "acquire", second)).json()).status).toBe("queued");
     expect((await (await call(object, "acquire", other)).json()).status).toBe("granted");
-    const release = await token("release", { accountId: "account-b", leaseId: "lb1" }, policy);
-    expect((await (await call(object, "release", release)).json()).existed).toBe(true);
+    const releaseOther = await token("release", { accountId: "account-b", leaseId: "lb1" }, { ...policy, accountCap: 5 });
+    expect((await (await call(object, "release", releaseOther)).json()).existed).toBe(true);
     const retry = await token("acquire", { accountId: "account-a", requestId: "a2", leaseId: "la2" }, policy);
+    expect((await (await call(object, "acquire", retry)).json()).status).toBe("queued");
+    const releaseOwner = await token("release", { accountId: "account-a", leaseId: "la1" }, policy);
+    expect((await (await call(object, "release", releaseOwner)).json()).existed).toBe(true);
     expect((await (await call(object, "acquire", retry)).json()).status).toBe("granted");
   });
 
