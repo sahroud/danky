@@ -34,8 +34,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Pin npm to a stable installer version
+        run: npm install --global npm@10.9.3
       - name: Install platform dependencies
-        run: npm install --ignore-scripts
+        run: npm install --ignore-scripts --no-audit --no-fund
       - name: Run API and authentication tests
         run: npm test
       - name: Set up Python
