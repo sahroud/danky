@@ -496,6 +496,15 @@ async function adminUpdateGrant(request, env, grantId) {
 }
 
 
+async function adminProductPlans(request, env, productKey) {
+  const identity = await verifyFirebaseIdToken(bearerToken(request), env);
+  if (!isCentralAdmin(identity, env)) return json({ error: "central_admin_required" }, 403);
+  const result = await env.CORE_DB.prepare(
+    "SELECT p.plan_code,p.display_name,p.limits_json,p.is_active,(SELECT COUNT(*) FROM plan_features pf WHERE pf.product_key=p.product_key AND pf.plan_code=p.plan_code) AS feature_count FROM plans p WHERE p.product_key=? ORDER BY p.display_name"
+  ).bind(productKey).all();
+  return json({ product_key: productKey, plans: result.results || [] });
+}
+
 async function adminAccountSubscriptions(request, env, accountId) {
   const identity = await verifyFirebaseIdToken(bearerToken(request), env);
   if (!isCentralAdmin(identity, env)) return json({ error: "central_admin_required" }, 403);
@@ -658,11 +667,13 @@ async function handle(request, env = {}) {
     response = await getProduct(env, productKey);
   } else if (request.method === "POST" && url.pathname === "/v1/auth/session") {
     response = await authenticate(request, env);
-  } else if (request.method === "GET" && /^\\/v1\\/admin\\/accounts\\/[^/]+\\/subscriptions$/.test(url.pathname)) {
+  } else if (request.method === "GET" && /^\/v1\/admin\/products\/[a-z0-9-]+\/plans$/.test(url.pathname)) {
+    response = await adminProductPlans(request, env, url.pathname.split("/")[4]);
+  } else if (request.method === "GET" && /^\/v1\/admin\/accounts\/[^/]+\/subscriptions$/.test(url.pathname)) {
     response = await adminAccountSubscriptions(request, env, decodeURIComponent(url.pathname.split("/")[4]));
-  } else if (request.method === "POST" && /^\\/v1\\/admin\\/accounts\\/[^/]+\\/subscriptions$/.test(url.pathname)) {
+  } else if (request.method === "POST" && /^\/v1\/admin\/accounts\/[^/]+\/subscriptions$/.test(url.pathname)) {
     response = await adminCreateSubscription(request, env, decodeURIComponent(url.pathname.split("/")[4]));
-  } else if (request.method === "PATCH" && /^\\/v1\\/admin\\/subscriptions\\/[^/]+$/.test(url.pathname)) {
+  } else if (request.method === "PATCH" && /^\/v1\/admin\/subscriptions\/[^/]+$/.test(url.pathname)) {
     response = await adminUpdateSubscription(request, env, decodeURIComponent(url.pathname.split("/")[4]));
   } else if (request.method === "GET" && url.pathname === "/v1/admin/accounts") {
     response = await adminAccountList(request, env);
