@@ -93,7 +93,7 @@ export async function loadEffectiveRuntimePolicy(db, accountId, productKey) {
     throw new TypeError("invalid_runtime_policy_scope");
   }
   const productPolicy = await db.prepare(
-    "SELECT max_devices_per_account,max_sessions_per_account,session_lease_seconds,max_concurrent_operations,max_queued_operations,queue_wait_seconds,max_operation_lifetime_seconds FROM product_runtime_policies WHERE product_key=?"
+    "SELECT max_devices_per_account,max_sessions_per_account,operation_lease_seconds AS session_lease_seconds,max_concurrent_operations,max_queued_operations,queue_wait_seconds,max_operation_lifetime_seconds FROM product_runtime_policies WHERE product_key=?"
   ).bind(productKey).first();
   if (!productPolicy) {
     throw Object.assign(new Error("runtime_policy_not_configured"), { code: "runtime_policy_not_configured" });
