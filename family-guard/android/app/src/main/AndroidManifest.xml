@@ -10,7 +10,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
     <application
         android:allowBackup="false"
-        android:label="SAHROUD FAMILY GUARD &amp; HEALTH"
+        android:label="SAHROUD FAMILY GUARD - دستگاه عضو"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:supportsRtl="true">
         <activity android:name=".MainActivity" android:exported="true">
