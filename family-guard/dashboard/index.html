@@ -63,6 +63,11 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <label for="recoveryKey">کلید بازیابی مدیریتی Worker</label>
 <input id="recoveryKey" type="password" autocomplete="off" dir="ltr" placeholder="کلید محرمانه تنظیم‌شده در Cloudflare">
 <button id="recoverOwner" class="secondary">تعویض کلید والد و ورود</button>
+<div id="recoveredTokenBox" class="hidden">
+  <p class="notice">این کلید جدید فقط همین بار صادر شده است. آن را در محل امن ذخیره کنید؛ با بستن صفحه از دست می‌رود.</p>
+  <div id="recoveredToken" class="token" dir="ltr"></div>
+  <button id="copyRecoveredToken" class="secondary">کپی کلید جدید</button>
+</div>
 <p class="muted">برای جلوگیری از بازیابی اشتباه، این عملیات فقط وقتی انجام می‌شود که دقیقاً یک والد اصلی فعال در پایگاه داده وجود داشته باشد.</p>
 </section>
 <section class="card">
@@ -114,6 +119,8 @@ $("recoverOwner").onclick = async () => {
     if(!response.ok) throw new Error(data.error||("HTTP "+response.status));
     parentToken=data.parent_token;
     $("token").value=parentToken;
+    $("recoveredToken").textContent=parentToken;
+    $("recoveredTokenBox").classList.remove("hidden");
     $("recoveryKey").value="";
     say("کلید والد با موفقیت تعویض شد؛ اکنون در حال ورود به همان خانواده هستیم.");
     $("connect").click();
@@ -122,6 +129,15 @@ $("recoverOwner").onclick = async () => {
     say("بازیابی انجام نشد: "+e.message+" — تنظیمات محرمانه Worker و نشانی API را بررسی کنید.");
   } finally {
     button.disabled=false;
+  }
+};
+$("copyRecoveredToken").onclick = async () => {
+  const value=$("recoveredToken").textContent;
+  try {
+    await navigator.clipboard.writeText(value);
+    say("کلید جدید کپی شد؛ آن را در محل امن نگهداری کنید.");
+  } catch(e) {
+    say("کپی خودکار ممکن نشد؛ کلید نمایش‌داده‌شده را به‌صورت دستی انتخاب و کپی کنید.");
   }
 };
 $("connect").onclick = async () => {
