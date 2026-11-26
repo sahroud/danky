@@ -1,6 +1,6 @@
 {
-  "updated_at": "2026-11-26T15:34:29.167049+00:00",
-  "last_checked_at": "2026-11-26T15:34:27.438526+00:00",
+  "updated_at": "2026-11-26T23:59:43.123279+00:00",
+  "last_checked_at": "2026-11-26T23:59:41.689037+00:00",
   "monitor_status": "ok",
   "scan_stats": {
     "pages_checked": 2,
@@ -13,6 +13,18 @@
   "notice": "تمام موارد صرفاً سرنخ عمومی یا OCR هستند؛ اعتبار هر کد باید در حساب/جاکدی دیجی‌کالا آزمایش شود.",
   "candidates": [
     {
+      "code": "DIGITALBF050905",
+      "code_type": "کد تخفیف خرید",
+      "source_name": "کانال رسمی دیجی‌کالا",
+      "source_url": "https://t.me/s/digikalaofficialaccount",
+      "source_type": "official",
+      "discount_percent": null,
+      "status": "کد احتمالی؛ پذیرش هنوز آزمایش نشده",
+      "excerpt": "\n            \n            \n            \n         \n       \n     \n       Digikala | دیجی‌کالا   \n\n \n \n   Digikala | دیجی‌کالا \n \n ۵ میلیون تومن تخفیففففففف   👀    👀    👀    👀    👀   DigitalBF050905 برای خرید‌های دیجیتال، بالای ۱۰۰ تومن   👀     https://dgka.me/OQF8fV \n \n گوشی و لپ‌تاپ و هرررررچیز دیجیتالی که لازم دارین   🔥    🔥    🔥    🔥    🔥    🔥   \n    😢  21    🤩  5    👀  4",
+      "seen_at": "2026-11-26T23:59:41.689037+00:00",
+      "last_seen_at": "2026-11-26T23:59:41.689037+00:00"
+    },
+    {
       "code": "DKBLG",
       "code_type": "کد جاکدی",
       "source_name": "کانال رسمی دیجی‌کالا",
@@ -20,9 +32,21 @@
       "source_type": "official",
       "discount_percent": null,
       "status": "کد احتمالی؛ پذیرش هنوز آزمایش نشده",
-      "excerpt": "، عجیییییب :))))))  🔥    🔥    🔥       🔗    https://dgka.me/UvanDc  \n    😢  46    ❤  16    👀  10    ⚡  5    🔥  4   \n  \n   \n     33.3K   views    17:25   \n   \n \n   \n  \n    \n         \n   \n    \n         \n       \n         \n            \n            \n            \n            \n         \n       \n     \n       Digikala | دیجی‌کالا   \n\n\n  اگه این کد رو بزنین تو جاکدی، هر ساعت یک کدتخفیف جدید میگیرین   👀    👀 ",
+      "excerpt": "خرید کنی، شانس برنده شدن جایزه بیشتر میشه   🔥    🔥    🔥    🔥    \n    1    👌  15    ❤  7    😢  7    🤩  3    👍  2   \n  \n   \n     24.9K   views    17:29   \n   \n \n   \n  \n    \n         \n   \n    \n         \n       \n         \n            \n            \n            \n            \n         \n       \n     \n       Digikala | دیجی‌کالا   \n\n\n  اگه این کد رو بزنین تو جاکدی، هر ساعت یک کدتخفیف جدید میگیرین   👀    👀 ",
       "seen_at": "2026-11-23T04:02:14.553986+00:00",
-      "last_seen_at": "2026-11-26T15:34:27.438526+00:00"
+      "last_seen_at": "2026-11-26T23:59:41.689037+00:00"
+    },
+    {
+      "code": "DKOFF",
+      "code_type": "کد جاکدی",
+      "source_name": "کانال رسمی دیجی‌کالا",
+      "source_url": "https://t.me/s/digikalaofficialaccount",
+      "source_type": "official",
+      "discount_percent": null,
+      "status": "کد احتمالی؛ پذیرش هنوز آزمایش نشده",
+      "excerpt": "ذر هست یعنی فردا   👀    👀    👀    🔥    🔥    🔥    🔥   \n \n کد روز ششم با تخفیف های خفن:  DKOFF  \n    ❤  16    👀  7    😢  5    👏  2    😱  2    🤩  1   \n  \n   \n     18.2K   views    17:25   \n   \n \n   \n  \n    \n         \n   \n    \n         \n       \n         \n            \n            \n            \n            \n         \n       \n     \n       Digikala | دیجی‌کالا   \n\n \n \n   Digikala | دیجی‌کالا \n \n کد روز شش",
+      "seen_at": "2026-11-26T23:59:41.689037+00:00",
+      "last_seen_at": "2026-11-26T23:59:41.689037+00:00"
     }
   ],
   "source_errors": []
