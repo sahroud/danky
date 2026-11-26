@@ -58,7 +58,13 @@ export async function handle(request, env) {
 
   let response;
   if (url.pathname === "/health" && request.method === "GET") {
-    response = json({ service: "SAHROUD FAMILY GUARD API", status: "ok" });
+    try {
+      // Read-only connectivity check: verifies the D1 binding without changing data.
+      await env.DB.prepare("SELECT 1 AS ok").first();
+      response = json({ service: "SAHROUD FAMILY GUARD API", status: "ok", database: "ok" });
+    } catch {
+      response = json({ service: "SAHROUD FAMILY GUARD API", status: "degraded", database: "unavailable" }, 503);
+    }
   } else if (url.pathname === "/v1/families" && request.method === "POST") {
     const input = await body(request);
     const label = String(input?.parent_label || "").trim().slice(0, 80);
