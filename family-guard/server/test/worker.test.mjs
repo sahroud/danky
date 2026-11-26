@@ -108,8 +108,8 @@ class FakeD1 {
           return { meta: { changes: 1 } };
         }
         if (sql.includes("INSERT INTO devices")) {
-          const [id,family_id,label,device_token_hash,consented_at,sharing_enabled,created_at] = args;
-          db.devices.set(id,{id,family_id,label,device_token_hash,consented_at,sharing_enabled,last_seen_at:null,created_at});
+          const [id,family_id,label,device_token_hash,consented_at,created_at] = args;
+          db.devices.set(id,{id,family_id,label,device_token_hash,consented_at,sharing_enabled:1,last_seen_at:null,created_at});
           return { meta: { changes: 1 } };
         }
         if (sql.includes("INSERT INTO locations")) {
