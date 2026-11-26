@@ -65,6 +65,41 @@ export async function handle(request, env) {
     } catch {
       response = json({ service: "SAHROUD FAMILY GUARD API", status: "degraded", database: "unavailable" }, 503);
     }
+  } else if (url.pathname === "/v1/owner/recover" && request.method === "POST") {
+    // Recovery is deliberately gated by a high-entropy secret configured only in
+    // the Cloudflare Worker secret store. It never returns or changes family/device data.
+    const configuredKey = String(env.PARENT_RECOVERY_KEY || "");
+    const suppliedKey = request.headers.get("x-parent-recovery-key") || "";
+    let mismatch = configuredKey.length ^ suppliedKey.length;
+    const compareLength = Math.max(configuredKey.length, suppliedKey.length);
+    for (let i = 0; i < compareLength; i++) {
+      mismatch |= (configuredKey.charCodeAt(i) || 0) ^ (suppliedKey.charCodeAt(i) || 0);
+    }
+    if (configuredKey.length < 32 || mismatch !== 0) {
+      response = json({ error: "recovery_not_authorized" }, 401);
+    } else {
+      const owners = await env.DB.prepare(
+        "SELECT id AS member_id, family_id FROM family_members WHERE role = 'owner' AND status = 'active' LIMIT 2"
+      ).all();
+      const rows = owners.results || [];
+      if (rows.length !== 1) {
+        response = json({ error: "recovery_requires_exactly_one_active_owner" }, 409);
+      } else {
+        const newToken = randomToken();
+        const tokenHash = await hash(newToken);
+        const timestamp = now();
+        await env.DB.batch([
+          env.DB.prepare("UPDATE family_members SET token_hash = ? WHERE id = ? AND role = 'owner' AND status = 'active'")
+            .bind(tokenHash, rows[0].member_id),
+          env.DB.prepare("UPDATE families SET parent_token_hash = ? WHERE id = ?")
+            .bind(tokenHash, rows[0].family_id)
+        ]);
+        response = json({
+          parent_token: newToken,
+          message: "کلید والد تعویض شد. کلید قبلی دیگر معتبر نیست؛ کلید جدید را محرمانه نگه دارید."
+        });
+      }
+    }
   } else if (url.pathname === "/v1/families" && request.method === "POST") {
     const input = await body(request);
     const label = String(input?.parent_label || "").trim().slice(0, 80);
@@ -299,7 +334,7 @@ function corsHeaders(request, env) {
   if (origin && allowed && origin === allowed) {
     headers["access-control-allow-origin"] = origin;
     headers["access-control-allow-methods"] = "GET, POST, OPTIONS";
-    headers["access-control-allow-headers"] = "Content-Type, Authorization";
+    headers["access-control-allow-headers"] = "Content-Type, Authorization, X-Parent-Recovery-Key";
   }
   return headers;
 }
