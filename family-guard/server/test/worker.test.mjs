@@ -51,6 +51,9 @@ class FakeD1 {
         return null;
       },
       async all() {
+        if (sql.includes("FROM family_members WHERE role = 'owner'")) {
+          return { results: [...db.members.values()].filter(x => x.role === "owner" && x.status === "active").slice(0, 2).map(x => ({ member_id: x.id, family_id: x.family_id })) };
+        }
         if (sql.includes("FROM devices d WHERE d.family_id")) {
           const rows = [...db.devices.values()].filter(x => x.family_id === args[0]).map(device => {
             const latest = db.locations.filter(x => x.device_id === device.id)
@@ -114,6 +117,16 @@ class FakeD1 {
           db.locations.push({device_id,latitude,longitude,accuracy_m,recorded_at,received_at});
           return { meta: { changes: 1 } };
         }
+        if (sql.includes("UPDATE family_members SET token_hash")) {
+          const [token_hash,id] = args; const member = db.members.get(id);
+          if (member && member.role === "owner" && member.status === "active") { member.token_hash = token_hash; return { meta: { changes: 1 } }; }
+          return { meta: { changes: 0 } };
+        }
+        if (sql.includes("UPDATE families SET parent_token_hash")) {
+          const [parent_token_hash,id] = args; const family = db.families.get(id);
+          if (family) { family.parent_token_hash = parent_token_hash; return { meta: { changes: 1 } }; }
+          return { meta: { changes: 0 } };
+        }
         if (sql.includes("UPDATE devices SET last_seen_at")) {
           const [last_seen_at,id] = args;
           const device = db.devices.get(id);
@@ -140,13 +153,14 @@ class FakeD1 {
   }
 }
 
-const request = (path, { method = "GET", body, token, origin } = {}) =>
+const request = (path, { method = "GET", body, token, origin, recoveryKey } = {}) =>
   new Request("https://family.test" + path, {
     method,
     headers: {
       ...(body === undefined ? {} : { "content-type": "application/json" }),
       ...(token ? { authorization: "Bearer " + token } : {}),
-      ...(origin ? { origin } : {})
+      ...(origin ? { origin } : {}),
+      ...(recoveryKey ? { "x-parent-recovery-key": recoveryKey } : {})
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
   });
@@ -306,4 +320,48 @@ test("device owner can stop sharing and subsequent location uploads are rejected
   }), env);
   assert.equal(upload.status, 403);
   assert.equal(DB.locations.length, 0);
+});
+
+test("owner recovery rotates only the single active owner key and preserves paired devices", async () => {
+  const DB = new FakeD1();
+  const env = { DB, PARENT_RECOVERY_KEY: "a".repeat(48) };
+  const created = await (await handle(request("/v1/families", {
+    method:"POST", body:{parent_label:"Owner"}
+  }), env)).json();
+  const invite = await (await handle(request("/v1/invites", {
+    method:"POST", body:{}, token:created.parent_token
+  }), env)).json();
+  const paired = await (await handle(request("/v1/devices/pair", {
+    method:"POST", body:{invite_code:invite.invite_code,device_label:"Ali phone",consent:true}
+  }), env)).json();
+
+  const denied = await handle(request("/v1/owner/recover", {
+    method:"POST", recoveryKey:"wrong-key"
+  }), env);
+  assert.equal(denied.status, 401);
+
+  const rotatedResponse = await handle(request("/v1/owner/recover", {
+    method:"POST", recoveryKey:"a".repeat(48)
+  }), env);
+  assert.equal(rotatedResponse.status, 200);
+  const rotated = await rotatedResponse.json();
+  assert.ok(rotated.parent_token);
+  assert.notEqual(rotated.parent_token, created.parent_token);
+
+  const oldKey = await handle(request("/v1/family/devices", { token:created.parent_token }), env);
+  assert.equal(oldKey.status, 401);
+  const newKey = await handle(request("/v1/family/devices", { token:rotated.parent_token }), env);
+  assert.equal(newKey.status, 200);
+  assert.equal((await newKey.json()).devices.length, 1);
+  assert.ok(DB.devices.has(paired.device_id));
+  assert.equal(DB.devices.get(paired.device_id).sharing_enabled, 1);
+});
+
+test("owner recovery refuses to run unless exactly one active owner exists", async () => {
+  const DB = new FakeD1();
+  const env = { DB, PARENT_RECOVERY_KEY: "b".repeat(48) };
+  const response = await handle(request("/v1/owner/recover", {
+    method:"POST", recoveryKey:"b".repeat(48)
+  }), env);
+  assert.equal(response.status, 409);
 });
