@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - "family-guard/android/**"
+      - "family-guard/server/**"
       - ".github/workflows/family-guard-apk.yml"
 
 permissions:
