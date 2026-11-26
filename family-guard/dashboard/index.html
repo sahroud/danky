@@ -58,6 +58,14 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <div id="secondParentResult" class="status hidden"></div>
 </section>
 <section class="card">
+<h2>بازیابی امن کلید والد</h2>
+<p class="notice">این بخش فقط پس از تنظیم کلید بازیابی محرمانه در تنظیمات Worker فعال می‌شود. کلید بازیابی را در اختیار هیچ‌کس قرار ندهید و آن را در GitHub یا پیام‌رسان منتشر نکنید. این عملیات فقط کلید والد را تعویض می‌کند و خانواده و دستگاه‌های متصل را حذف نمی‌کند.</p>
+<label for="recoveryKey">کلید بازیابی مدیریتی Worker</label>
+<input id="recoveryKey" type="password" autocomplete="off" dir="ltr" placeholder="کلید محرمانه تنظیم‌شده در Cloudflare">
+<button id="recoverOwner" class="secondary">تعویض کلید والد و ورود</button>
+<p class="muted">برای جلوگیری از بازیابی اشتباه، این عملیات فقط وقتی انجام می‌شود که دقیقاً یک والد اصلی فعال در پایگاه داده وجود داشته باشد.</p>
+</section>
+<section class="card">
 <h2>ورود والد / مدیر خانواده</h2>
 <label for="token">کلید محرمانه والد</label><input id="token" type="password" autocomplete="off" placeholder="کلید دریافتی هنگام ایجاد خانواده">
 <button id="connect" class="secondary">اتصال به خانواده</button>
@@ -90,6 +98,31 @@ $("create").onclick = async () => {
     say("خانواده ایجاد شد. اکنون برای عضو موردنظر کد اتصال بسازید.");
     await refreshDevices();
   } catch(e) { say("خطا در ایجاد خانواده: "+e.message); }
+};
+$("recoverOwner").onclick = async () => {
+  const recoveryKey=$("recoveryKey").value.trim();
+  if(recoveryKey.length<32) return say("کلید بازیابی معتبر را که در تنظیمات محرمانه Worker ثبت کرده‌اید وارد کنید.");
+  const button=$("recoverOwner");
+  button.disabled=true;
+  try {
+    const response=await fetch(api()+"/v1/owner/recover",{
+      method:"POST",
+      headers:{"content-type":"application/json","x-parent-recovery-key":recoveryKey},
+      body:"{}"
+    });
+    const data=await response.json().catch(()=>({error:"پاسخ نامعتبر سرور"}));
+    if(!response.ok) throw new Error(data.error||("HTTP "+response.status));
+    parentToken=data.parent_token;
+    $("token").value=parentToken;
+    $("recoveryKey").value="";
+    say("کلید والد با موفقیت تعویض شد؛ اکنون در حال ورود به همان خانواده هستیم.");
+    $("connect").click();
+  } catch(e) {
+    $("recoveryKey").value="";
+    say("بازیابی انجام نشد: "+e.message+" — تنظیمات محرمانه Worker و نشانی API را بررسی کنید.");
+  } finally {
+    button.disabled=false;
+  }
 };
 $("connect").onclick = async () => {
   parentToken = $("token").value.trim();
