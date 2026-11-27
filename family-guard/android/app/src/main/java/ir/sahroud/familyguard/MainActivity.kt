@@ -13,6 +13,7 @@ import android.graphics.Color
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.location.Location
+import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
@@ -43,6 +44,7 @@ class MainActivity : Activity() {
     private var routePoints = mutableListOf<String>()
     private var todaySteps = 0
     private var waterGlasses = 0
+    private var pendingTrackingAfterLocationSettings = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -283,7 +285,44 @@ class MainActivity : Activity() {
 
     private fun dayKey(): String = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
 
+    private fun isDeviceLocationEnabled(): Boolean {
+        val manager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return try {
+            if (Build.VERSION.SDK_INT >= 28) manager.isLocationEnabled
+            else manager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun requestDeviceLocationEnabled() {
+        AlertDialog.Builder(this)
+            .setTitle("روشن کردن مکان گوشی")
+            .setMessage("برای ثبت و نمایش مسیر، ابتدا مکان (Location/GPS) گوشی را روشن کنید. با انتخاب «رفتن به تنظیمات»، صفحه تنظیم مکان باز می‌شود. پس از روشن کردن مکان و بازگشت به برنامه، وضعیت دوباره بررسی خواهد شد.")
+            .setNegativeButton("فعلاً نه") { _, _ ->
+                pendingTrackingAfterLocationSettings = false
+                statusText.text = "مکان گوشی خاموش است؛ ثبت مسیر شروع نشد."
+            }
+            .setPositiveButton("رفتن به تنظیمات") { _, _ ->
+                pendingTrackingAfterLocationSettings = true
+                try {
+                    startActivity(Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                } catch (e: Exception) {
+                    pendingTrackingAfterLocationSettings = false
+                    statusText.text = "باز کردن تنظیمات مکان ناموفق بود: ${e.localizedMessage ?: "خطای نامشخص"}"
+                }
+            }
+            .show()
+    }
+
     private fun startTracking() {
+        // Require system Location to be enabled before asking for permissions or starting the service.
+        if (!isDeviceLocationEnabled()) {
+            requestDeviceLocationEnabled()
+            return
+        }
+        pendingTrackingAfterLocationSettings = false
         // Keep foreground location sharing visibly disclosed on Android 13+.
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -475,6 +514,14 @@ class MainActivity : Activity() {
         restoreRouteDisplay()
         refreshFamilyStatus()
         refreshStepsText()
+        if (pendingTrackingAfterLocationSettings) {
+            if (isDeviceLocationEnabled()) {
+                pendingTrackingAfterLocationSettings = false
+                startTracking()
+            } else {
+                statusText.text = "مکان گوشی هنوز خاموش است؛ برای شروع ثبت مسیر، مکان را روشن کنید."
+            }
+        }
     }
 
     override fun onPause() {
