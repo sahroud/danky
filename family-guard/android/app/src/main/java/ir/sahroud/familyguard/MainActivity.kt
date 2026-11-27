@@ -10,12 +10,16 @@ import android.content.IntentFilter
 import android.os.Build
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.content.res.ColorStateList
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.location.Location
 import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.widget.Button
 import android.widget.EditText
@@ -56,34 +60,53 @@ class MainActivity : Activity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(22, 24, 22, 28)
-            setBackgroundColor(Color.rgb(245, 248, 252))
+            setPadding(16, 18, 16, 28)
+            setBackgroundColor(Color.rgb(239, 245, 249))
         }
         fun heading(text: String): TextView = TextView(this).apply {
             this.text = text
-            textSize = 19f
-            setTextColor(Color.rgb(20, 65, 105))
-            setPadding(0, 22, 0, 8)
+            textSize = 17f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setTextColor(Color.rgb(17, 66, 94))
+            setPadding(15, 17, 15, 13)
+            background = GradientDrawable().apply {
+                setColor(Color.WHITE)
+                cornerRadius = 22f
+                setStroke(1, Color.rgb(222, 233, 240))
+            }
         }
         fun body(text: String): TextView = TextView(this).apply {
             this.text = text
-            textSize = 15f
-            setTextColor(Color.DKGRAY)
-            setPadding(0, 6, 0, 10)
+            textSize = 14f
+            setTextColor(Color.rgb(48, 69, 84))
+            setPadding(12, 9, 12, 11)
+            setLineSpacing(3f, 1f)
         }
         fun action(text: String, click: () -> Unit) = Button(this).apply {
             this.text = text
+            isAllCaps = false
+            textSize = 14f
+            minHeight = 52
+            setTextColor(Color.WHITE)
+            backgroundTintList = ColorStateList.valueOf(Color.rgb(20, 105, 133))
+            setPadding(14, 8, 14, 8)
             setOnClickListener { click() }
         }
 
         root.addView(TextView(this).apply {
             text = "SAHROUD FAMILY GUARD & HEALTH"
-            textSize = 21f
-            setTextColor(Color.rgb(16, 76, 120))
+            textSize = 20f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-            setPadding(0, 8, 0, 14)
+            setPadding(16, 24, 16, 10)
+            background = GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(Color.rgb(16, 54, 83), Color.rgb(18, 119, 132))
+            ).apply { cornerRadius = 26f }
         })
-        root.addView(body("موقعیت، مسیر، گام‌شمار و پایش عادت‌های سلامت در یک برنامه"))
+        root.addView(body("موقعیت و مسیر با رضایت صاحب گوشی | گام‌شمار و اطلاعات سلامت فقط روی همین گوشی"))
+        root.addView(action("بررسی به‌روزرسانی برنامه") { checkForUpdates(true) })
         root.addView(heading("۱) موقعیت و ثبت مسیر"))
         statusText = body("ثبت موقعیت خاموش است. با آگاهی و اجازه خودتان شروع کنید.")
         locationText = body("هنوز موقعیتی ثبت نشده است.")
@@ -140,6 +163,61 @@ class MainActivity : Activity() {
         refreshHealth()
         refreshStepsText()
         restoreRouteDisplay()
+        checkForUpdates(false)
+    }
+
+
+    // Offers official releases. Installing over the existing package preserves
+    // local data; the user confirms the release page and Android installer.
+    private fun checkForUpdates(showUpToDate: Boolean) {
+        Thread {
+            try {
+                val connection = java.net.URL("https://api.github.com/repos/sahroud/danky/releases/latest")
+                    .openConnection() as java.net.HttpURLConnection
+                connection.connectTimeout = 8000
+                connection.readTimeout = 8000
+                connection.setRequestProperty("Accept", "application/vnd.github+json")
+                connection.setRequestProperty("User-Agent", "SAHROUD-FAMILY-GUARD")
+                val code = connection.responseCode
+                if (code !in 200..299) throw IllegalStateException("HTTP $code")
+                val json = org.json.JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                connection.disconnect()
+                val tag = json.optString("tag_name", "")
+                val releaseUrl = json.optString("html_url", "https://github.com/sahroud/danky/releases")
+                val latest = Regex("(\\d+)\\.(\\d+)\\.(\\d+)").find(tag)?.groupValues?.drop(1)?.map { it.toInt() }
+                    ?: return@Thread
+                @Suppress("DEPRECATION")
+                val currentName = packageManager.getPackageInfo(packageName, 0).versionName ?: "0.0.0"
+                val current = Regex("(\\d+)\\.(\\d+)\\.(\\d+)").find(currentName)?.groupValues?.drop(1)?.map { it.toInt() }
+                    ?: listOf(0, 0, 0)
+                val newer = (0..2).firstNotNullOfOrNull { i ->
+                    when {
+                        latest[i] > current.getOrElse(i) { 0 } -> true
+                        latest[i] < current.getOrElse(i) { 0 } -> false
+                        else -> null
+                    }
+                } ?: false
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    if (newer) {
+                        AlertDialog.Builder(this)
+                            .setTitle("نسخه جدید برنامه آماده است")
+                            .setMessage("نسخه $tag منتشر شده است. صفحه دریافت رسمی باز شود؟\\n\\nبرای حفظ اطلاعات، برنامه قبلی را حذف نکنید؛ نسخه جدید را روی همان برنامه نصب کنید.")
+                            .setNegativeButton("بعداً", null)
+                            .setPositiveButton("مشاهده و دریافت") { _, _ ->
+                                try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(releaseUrl))) }
+                                catch (_: Exception) { Toast.makeText(this, "بازکردن صفحه دریافت ممکن نشد.", Toast.LENGTH_LONG).show() }
+                            }.show()
+                    } else if (showUpToDate) {
+                        Toast.makeText(this, "برنامه به‌روز است.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (_: Exception) {
+                if (showUpToDate) runOnUiThread {
+                    Toast.makeText(this, "بررسی نسخه ممکن نشد؛ اتصال اینترنت را بررسی کنید.", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
     }
 
     private val locationReceiver = object : BroadcastReceiver() {
