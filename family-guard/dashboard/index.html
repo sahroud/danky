@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#123b5d">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
 <title>پنل والدین | SAHROUD FAMILY GUARD</title>
 <style>
 :root{font-family:Tahoma,Arial,sans-serif;color:#152d40;background:#eef3f8}
@@ -36,7 +38,7 @@ hr{border:0;border-top:1px solid #e6edf2;margin:20px 0}
 </style>
 </head>
 <body>
-<header class="top"><h1>SAHROUD FAMILY GUARD</h1><div>پنل مدیریت خانواده و مشاهدهٔ موقعیت اعضا</div></header>
+<header class="top"><h1>SAHROUD FAMILY GUARD</h1><div>پنل مدیریت خانواده و مشاهدهٔ موقعیت اعضا</div><button id="installPanel" class="secondary hidden" onclick="installSahroudPanel()">نصب پنل والد روی گوشی</button></header>
 <main>
 <section class="card">
 <div class="notice">این پنل فقط موقعیت دستگاه‌هایی را نشان می‌دهد که با کد یک‌بارمصرف به خانواده پیوسته‌اند و صاحب دستگاه آگاهانه اشتراک‌گذاری را پذیرفته است. موقعیت قدیمی، موقعیت زنده محسوب نمی‌شود.</div>
@@ -307,5 +309,29 @@ $("logout").onclick=()=>{
   say("از پنل خارج شدید و کلید ذخیره‌شده از این مرورگر پاک شد.");
 };
 if (parentToken) $("connect").click();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(() => {}));
+}
+let sahroudInstallPrompt = null;
+window.addEventListener("beforeinstallprompt", event => {
+  event.preventDefault();
+  sahroudInstallPrompt = event;
+  const button = document.getElementById("installPanel");
+  if (button) button.classList.remove("hidden");
+});
+window.addEventListener("appinstalled", () => {
+  const button = document.getElementById("installPanel");
+  if (button) button.classList.add("hidden");
+});
+function installSahroudPanel() {
+  if (!sahroudInstallPrompt) {
+    alert("برای نصب، از منوی Chrome گزینه «Install app» یا «افزودن به صفحه اصلی» را انتخاب کنید.");
+    return;
+  }
+  sahroudInstallPrompt.prompt();
+  sahroudInstallPrompt.userChoice.finally(() => { sahroudInstallPrompt = null; });
+}
 </script>
 </body></html>
