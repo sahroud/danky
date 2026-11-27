@@ -43,8 +43,8 @@ jobs:
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: family-guard-v0.1.0
-          name: SAHROUD FAMILY GUARD v0.1.0 (Test)
+          tag_name: family-guard-v0.2.0
+          name: SAHROUD FAMILY GUARD v0.2.0 (Test)
           body: |
             نسخه آزمایشی اندروید SAHROUD FAMILY GUARD.
             برای نصب مستقیم، فایل app-debug.apk را دریافت کنید.
