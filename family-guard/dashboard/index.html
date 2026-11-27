@@ -6,21 +6,33 @@
 <meta name="theme-color" content="#123b5d">
 <title>پنل والدین | SAHROUD FAMILY GUARD</title>
 <style>
-:root{font-family:Tahoma,Arial,sans-serif;color:#172b3a;background:#f2f6fa}
-*{box-sizing:border-box}body{margin:0}.top{background:#123b5d;color:#fff;padding:22px 16px}
-main{max-width:760px;margin:18px auto;padding:0 12px}.card{background:#fff;border:1px solid #dce5ed;border-radius:14px;padding:16px;margin:12px 0;box-shadow:0 3px 12px #17324d0a}
-h1{font-size:20px;margin:0 0 8px}h2{font-size:17px;margin:0 0 12px;color:#174b70}
-p{line-height:1.8;margin:8px 0}.muted{color:#627586;font-size:13px}
-label{display:block;margin:10px 0 5px;font-size:14px}
-input{width:100%;padding:12px;border:1px solid #bdcbd8;border-radius:9px;font:inherit}
-button{border:0;border-radius:9px;padding:12px 15px;font:inherit;cursor:pointer;background:#145b86;color:white;margin:8px 4px 0 0}
-button.secondary{background:#e8f0f6;color:#174b70}button.danger{background:#9e3030}
-button:disabled{opacity:.5;cursor:not-allowed}
-.notice{padding:11px;border-radius:9px;background:#fff5dc;color:#634b16;font-size:13px;line-height:1.8}
-.status{margin:10px 0;padding:10px;border-radius:8px;background:#edf4f8;white-space:pre-wrap;line-height:1.8}
-.device{border-top:1px solid #e5ebf0;padding:13px 0}.device:first-child{border-top:0}
-.token{direction:ltr;text-align:left;word-break:break-all;background:#f2f5f7;padding:10px;border-radius:8px;font-size:12px}
+:root{font-family:Tahoma,Arial,sans-serif;color:#152d40;background:#eef3f8}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 85% 0,#dceaf5 0,transparent 42%),#eef3f8;min-height:100vh}
+.top{background:linear-gradient(120deg,#102f4b,#145b78 62%,#16818a);color:#fff;padding:26px max(18px,calc((100% - 980px)/2));box-shadow:0 8px 28px #123b5d24}
+.top h1{font-size:22px;letter-spacing:.3px;margin:0 0 8px}.top div{color:#d8eaf3;font-size:13px}
+main{max-width:980px;margin:22px auto;padding:0 16px 36px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
+.card{background:#fff;border:1px solid #dce6ee;border-radius:18px;padding:20px;margin:0;box-shadow:0 8px 28px #17324d0b;min-width:0}
+.card:first-child,.card#familyCard,.card:has(#recoveryKey),#status{grid-column:1/-1}
+h1{font-size:20px;margin:0 0 8px}h2{font-size:17px;margin:0 0 14px;color:#174b70;display:flex;align-items:center;gap:9px}
+h2:before{content:"";width:4px;height:19px;border-radius:8px;background:#18a0a6;display:inline-block}
+p{line-height:1.85;margin:9px 0}.muted{color:#667b8b;font-size:13px}
+label{display:block;margin:12px 0 6px;font-size:14px;color:#29475d}
+input{width:100%;padding:13px 14px;border:1px solid #c9d6e1;border-radius:11px;font:inherit;background:#fbfdff;outline:none;transition:.2s}
+input:focus{border-color:#188b9a;box-shadow:0 0 0 3px #188b9a18}
+input[type=checkbox]{width:auto;accent-color:#147b89;transform:scale(1.12);margin-left:8px}
+button{border:0;border-radius:11px;padding:12px 17px;font:inherit;font-weight:600;cursor:pointer;background:linear-gradient(120deg,#145b86,#167d8a);color:white;margin:9px 4px 0 0;box-shadow:0 4px 12px #145b8622;transition:transform .15s,filter .15s}
+button:hover{filter:brightness(1.06);transform:translateY(-1px)}
+button.secondary{background:#e8f1f6;color:#174b70;box-shadow:none}button.danger{background:#a63b43;box-shadow:none}
+button:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.notice{padding:13px 15px;border:1px solid #f0dfb3;border-radius:12px;background:#fff8e8;color:#6b511d;font-size:13px;line-height:1.9}
+.status{margin:12px 0;padding:13px 15px;border-radius:12px;background:#eff5f8;border:1px solid #e0eaf0;white-space:pre-wrap;line-height:1.9;color:#27465c}
+.device{border:1px solid #e2ebf1;border-radius:14px;padding:15px;margin:12px 0;background:#fbfdff}.device:first-child{border-top:1px solid #e2ebf1}
+.device strong{font-size:16px;color:#163e5a}.device a{display:inline-block;color:#087d89;font-weight:600;margin:7px 0;text-decoration:none}.device a:hover{text-decoration:underline}
+.token{direction:ltr;text-align:left;word-break:break-all;background:#f2f6f8;border:1px dashed #c5d4df;padding:12px;border-radius:10px;font-size:12px}
+hr{border:0;border-top:1px solid #e6edf2;margin:20px 0}
+#status{position:sticky;bottom:10px;z-index:3;box-shadow:0 5px 22px #17324d12}
 .hidden{display:none!important}
+@media(max-width:680px){main{display:block;margin:14px auto;padding:0 12px 28px}.card{padding:16px;margin:12px 0;border-radius:15px}.top{padding:22px 16px}#status{position:static}}
 </style>
 </head>
 <body>
@@ -184,8 +196,8 @@ $("connect").onclick = async () => {
     $("createCard").classList.add("hidden");
     $("familyInfo").textContent = "خانواده: "+data.family.parent_label+"\nشناسه: "+familyId+"\nنقش: "+(subscription.role==="owner"?"والد اصلی":"والد دوم");
     renderDevices(data.devices);
-    say("اتصال به پنل خانواده برقرار شد.");
-  } catch(e) { parentToken=""; say("ورود ناموفق: "+e.message); }
+    saveSession();\n    say("اتصال به پنل خانواده برقرار شد. ورود شما روی همین دستگاه ذخیره شد.");
+  } catch(e) {\n    const message=e.message||"خطای نامشخص";\n    if (/401|403|unauthorized|forbidden|token|parent/i.test(message)) {\n      parentToken="";\n      localStorage.removeItem(STORAGE_KEY);\n      say("کلید والد معتبر نیست یا دسترسی آن لغو شده است؛ دوباره با کلید معتبر وارد شوید.");\n    } else { say("ارتباط برقرار نشد: "+message+" — کلید ذخیره‌شده حذف نشده است؛ اتصال را دوباره امتحان کنید."); }\n  }
 };
 $("parentInvite").onclick = async () => {
   try {
