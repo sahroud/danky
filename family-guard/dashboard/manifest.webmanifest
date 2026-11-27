@@ -1,0 +1,17 @@
+{
+  "id": "./",
+  "name": "SAHROUD FAMILY GUARD",
+  "short_name": "SAHROUD والد",
+  "description": "پنل مدیریت خانواده و مشاهده موقعیت با رضایت اعضا",
+  "lang": "fa",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#eef3f8",
+  "theme_color": "#123b5d",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
