@@ -4,27 +4,41 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#123b5d">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
 <title>پنل والدین | SAHROUD FAMILY GUARD</title>
 <style>
-:root{font-family:Tahoma,Arial,sans-serif;color:#172b3a;background:#f2f6fa}
-*{box-sizing:border-box}body{margin:0}.top{background:#123b5d;color:#fff;padding:22px 16px}
-main{max-width:760px;margin:18px auto;padding:0 12px}.card{background:#fff;border:1px solid #dce5ed;border-radius:14px;padding:16px;margin:12px 0;box-shadow:0 3px 12px #17324d0a}
-h1{font-size:20px;margin:0 0 8px}h2{font-size:17px;margin:0 0 12px;color:#174b70}
-p{line-height:1.8;margin:8px 0}.muted{color:#627586;font-size:13px}
-label{display:block;margin:10px 0 5px;font-size:14px}
-input{width:100%;padding:12px;border:1px solid #bdcbd8;border-radius:9px;font:inherit}
-button{border:0;border-radius:9px;padding:12px 15px;font:inherit;cursor:pointer;background:#145b86;color:white;margin:8px 4px 0 0}
-button.secondary{background:#e8f0f6;color:#174b70}button.danger{background:#9e3030}
-button:disabled{opacity:.5;cursor:not-allowed}
-.notice{padding:11px;border-radius:9px;background:#fff5dc;color:#634b16;font-size:13px;line-height:1.8}
-.status{margin:10px 0;padding:10px;border-radius:8px;background:#edf4f8;white-space:pre-wrap;line-height:1.8}
-.device{border-top:1px solid #e5ebf0;padding:13px 0}.device:first-child{border-top:0}
-.token{direction:ltr;text-align:left;word-break:break-all;background:#f2f5f7;padding:10px;border-radius:8px;font-size:12px}
+:root{font-family:Tahoma,Arial,sans-serif;color:#152d40;background:#eef3f8}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 85% 0,#dceaf5 0,transparent 42%),#eef3f8;min-height:100vh}
+.top{background:linear-gradient(120deg,#102f4b,#145b78 62%,#16818a);color:#fff;padding:26px max(18px,calc((100% - 980px)/2));box-shadow:0 8px 28px #123b5d24}
+.top h1{font-size:22px;letter-spacing:.3px;margin:0 0 8px}.top div{color:#d8eaf3;font-size:13px}
+main{max-width:980px;margin:22px auto;padding:0 16px 36px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
+.card{background:#fff;border:1px solid #dce6ee;border-radius:18px;padding:20px;margin:0;box-shadow:0 8px 28px #17324d0b;min-width:0}
+.card:first-child,.card#familyCard,.card:has(#recoveryKey),#status{grid-column:1/-1}
+h1{font-size:20px;margin:0 0 8px}h2{font-size:17px;margin:0 0 14px;color:#174b70;display:flex;align-items:center;gap:9px}
+h2:before{content:"";width:4px;height:19px;border-radius:8px;background:#18a0a6;display:inline-block}
+p{line-height:1.85;margin:9px 0}.muted{color:#667b8b;font-size:13px}
+label{display:block;margin:12px 0 6px;font-size:14px;color:#29475d}
+input{width:100%;padding:13px 14px;border:1px solid #c9d6e1;border-radius:11px;font:inherit;background:#fbfdff;outline:none;transition:.2s}
+input:focus{border-color:#188b9a;box-shadow:0 0 0 3px #188b9a18}
+input[type=checkbox]{width:auto;accent-color:#147b89;transform:scale(1.12);margin-left:8px}
+button{border:0;border-radius:11px;padding:12px 17px;font:inherit;font-weight:600;cursor:pointer;background:linear-gradient(120deg,#145b86,#167d8a);color:white;margin:9px 4px 0 0;box-shadow:0 4px 12px #145b8622;transition:transform .15s,filter .15s}
+button:hover{filter:brightness(1.06);transform:translateY(-1px)}
+button.secondary{background:#e8f1f6;color:#174b70;box-shadow:none}button.danger{background:#a63b43;box-shadow:none}
+button:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.notice{padding:13px 15px;border:1px solid #f0dfb3;border-radius:12px;background:#fff8e8;color:#6b511d;font-size:13px;line-height:1.9}
+.status{margin:12px 0;padding:13px 15px;border-radius:12px;background:#eff5f8;border:1px solid #e0eaf0;white-space:pre-wrap;line-height:1.9;color:#27465c}
+.device{border:1px solid #e2ebf1;border-radius:14px;padding:15px;margin:12px 0;background:#fbfdff}.device:first-child{border-top:1px solid #e2ebf1}
+.device strong{font-size:16px;color:#163e5a}.device a{display:inline-block;color:#087d89;font-weight:600;margin:7px 0;text-decoration:none}.device a:hover{text-decoration:underline}
+.token{direction:ltr;text-align:left;word-break:break-all;background:#f2f6f8;border:1px dashed #c5d4df;padding:12px;border-radius:10px;font-size:12px}
+hr{border:0;border-top:1px solid #e6edf2;margin:20px 0}
+#status{position:sticky;bottom:10px;z-index:3;box-shadow:0 5px 22px #17324d12}
 .hidden{display:none!important}
+@media(max-width:680px){main{display:block;margin:14px auto;padding:0 12px 28px}.card{padding:16px;margin:12px 0;border-radius:15px}.top{padding:22px 16px}#status{position:static}}
 </style>
 </head>
 <body>
-<header class="top"><h1>SAHROUD FAMILY GUARD</h1><div>پنل مدیریت خانواده و مشاهدهٔ موقعیت اعضا</div></header>
+<header class="top"><h1>SAHROUD FAMILY GUARD</h1><div>پنل مدیریت خانواده و مشاهدهٔ موقعیت اعضا</div><button id="installPanel" class="secondary hidden" onclick="installSahroudPanel()">نصب پنل والد روی گوشی</button></header>
 <main>
 <section class="card">
 <div class="notice">این پنل فقط موقعیت دستگاه‌هایی را نشان می‌دهد که با کد یک‌بارمصرف به خانواده پیوسته‌اند و صاحب دستگاه آگاهانه اشتراک‌گذاری را پذیرفته است. موقعیت قدیمی، موقعیت زنده محسوب نمی‌شود.</div>
@@ -58,10 +72,25 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <div id="secondParentResult" class="status hidden"></div>
 </section>
 <section class="card">
+<h2>بازیابی امن کلید والد</h2>
+<p class="notice">این بخش فقط پس از تنظیم کلید بازیابی محرمانه در تنظیمات Worker فعال می‌شود. کلید بازیابی را در اختیار هیچ‌کس قرار ندهید و آن را در GitHub یا پیام‌رسان منتشر نکنید. این عملیات فقط کلید والد را تعویض می‌کند و خانواده و دستگاه‌های متصل را حذف نمی‌کند.</p>
+<label for="recoveryKey">کلید بازیابی مدیریتی Worker</label>
+<input id="recoveryKey" type="password" autocomplete="off" dir="ltr" placeholder="کلید محرمانه تنظیم‌شده در Cloudflare">
+<button id="recoverOwner" class="secondary">تعویض کلید والد و ورود</button>
+<div id="recoveredTokenBox" class="hidden">
+  <p class="notice">این کلید جدید فقط همین بار صادر شده است. آن را در محل امن ذخیره کنید؛ با بستن صفحه از دست می‌رود.</p>
+  <div id="recoveredToken" class="token" dir="ltr"></div>
+  <button id="copyRecoveredToken" class="secondary">کپی کلید جدید</button>
+</div>
+<p class="muted">برای جلوگیری از بازیابی اشتباه، این عملیات فقط وقتی انجام می‌شود که دقیقاً یک والد اصلی فعال در پایگاه داده وجود داشته باشد.</p>
+</section>
+<section class="card">
 <h2>ورود والد / مدیر خانواده</h2>
 <label for="token">کلید محرمانه والد</label><input id="token" type="password" autocomplete="off" placeholder="کلید دریافتی هنگام ایجاد خانواده">
+<label><input id="rememberLogin" type="checkbox" style="width:auto" checked> ورود من روی همین دستگاه ذخیره شود (فقط روی دستگاه شخصی و امن؛ برای ماندن ورود پس از Refresh فعال باشد)</label>
 <button id="connect" class="secondary">اتصال به خانواده</button>
-<p class="muted">کلید والد را در اختیار دیگران قرار ندهید. این نسخه آن را فقط در حافظه همین زبانه نگه می‌دارد و با بستن صفحه پاک می‌شود.</p>
+<button id="logout" class="secondary">خروج و پاک‌کردن ورود ذخیره‌شده</button>
+<p class="muted">نشانی سرور ذخیره می‌شود. کلید والد فقط با انتخاب گزینهٔ بالا در حافظهٔ مرورگر این دستگاه ذخیره می‌شود؛ روی رایانهٔ عمومی این گزینه را فعال نکنید.</p>
 </section>
 <div id="status" class="status" role="status">برای شروع، خانواده ایجاد کنید یا با کلید والد وارد شوید.</div>
 </main>
@@ -69,7 +98,30 @@ button:disabled{opacity:.5;cursor:not-allowed}
 const $ = id => document.getElementById(id);
 let parentToken = "";
 let familyId = "";
+const STORAGE_KEY = "sahroud_family_guard_parent_session_v1";
+const API_KEY = "sahroud_family_guard_api_v1";
 const api = () => $("api").value.trim().replace(/\/$/,"");
+function saveSession() {
+  try {
+    localStorage.setItem(API_KEY, api());
+    if ($("rememberLogin").checked && parentToken) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({token:parentToken, api:api()}));
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  } catch(e) { say("ذخیره در مرورگر ممکن نشد؛ تنظیمات حریم خصوصی مرورگر را بررسی کنید."); }
+}
+$("api").value = localStorage.getItem(API_KEY) || "https://sahroud-family-guard-api-2.sahroud.workers.dev";
+$("api").addEventListener("change", () => { try { localStorage.setItem(API_KEY, api()); } catch(e) {} });
+try {
+  const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+  if (saved && saved.token && saved.api) {
+    $("api").value = saved.api;
+    $("token").value = saved.token;
+    $("rememberLogin").checked = true;
+    parentToken = saved.token;
+  }
+} catch(e) { localStorage.removeItem(STORAGE_KEY); }
 const say = message => $("status").textContent = message;
 async function call(path, options={}) {
   const headers = {"content-type":"application/json", ...(options.headers||{})};
@@ -84,6 +136,7 @@ $("create").onclick = async () => {
     const data = await call("/v1/families",{method:"POST",body:JSON.stringify({parent_label:$("parent").value.trim()})});
     parentToken = data.parent_token; familyId = data.family_id;
     $("token").value = parentToken;
+    saveSession();
     $("familyCard").classList.remove("hidden");
     $("createCard").classList.add("hidden");
     $("familyInfo").textContent = "شناسه خانواده: "+familyId+"\nکلید والد در کادر ورود نمایش داده شده؛ آن را محرمانه نگه دارید.";
@@ -91,9 +144,46 @@ $("create").onclick = async () => {
     await refreshDevices();
   } catch(e) { say("خطا در ایجاد خانواده: "+e.message); }
 };
+$("recoverOwner").onclick = async () => {
+  const recoveryKey=$("recoveryKey").value.trim();
+  if(recoveryKey.length<32) return say("کلید بازیابی معتبر را که در تنظیمات محرمانه Worker ثبت کرده‌اید وارد کنید.");
+  const button=$("recoverOwner");
+  button.disabled=true;
+  try {
+    const response=await fetch(api()+"/v1/owner/recover",{
+      method:"POST",
+      headers:{"content-type":"application/json","x-parent-recovery-key":recoveryKey},
+      body:"{}"
+    });
+    const data=await response.json().catch(()=>({error:"پاسخ نامعتبر سرور"}));
+    if(!response.ok) throw new Error(data.error||("HTTP "+response.status));
+    parentToken=data.parent_token;
+    $("token").value=parentToken;
+    $("recoveredToken").textContent=parentToken;
+    $("recoveredTokenBox").classList.remove("hidden");
+    $("recoveryKey").value="";
+    say("کلید والد با موفقیت تعویض شد؛ اکنون در حال ورود به همان خانواده هستیم.");
+    $("connect").click();
+  } catch(e) {
+    $("recoveryKey").value="";
+    say("بازیابی انجام نشد: "+e.message+" — تنظیمات محرمانه Worker و نشانی API را بررسی کنید.");
+  } finally {
+    button.disabled=false;
+  }
+};
+$("copyRecoveredToken").onclick = async () => {
+  const value=$("recoveredToken").textContent;
+  try {
+    await navigator.clipboard.writeText(value);
+    say("کلید جدید کپی شد؛ آن را در محل امن نگهداری کنید.");
+  } catch(e) {
+    say("کپی خودکار ممکن نشد؛ کلید نمایش‌داده‌شده را به‌صورت دستی انتخاب و کپی کنید.");
+  }
+};
 $("connect").onclick = async () => {
   parentToken = $("token").value.trim();
   if (!parentToken) return say("کلید والد را وارد کنید.");
+  saveSession();
   try {
     const subscription = await call("/v1/family/subscription");
     if (subscription.role === "second_parent" && subscription.subscription_status !== "active") {
@@ -108,8 +198,17 @@ $("connect").onclick = async () => {
     $("createCard").classList.add("hidden");
     $("familyInfo").textContent = "خانواده: "+data.family.parent_label+"\nشناسه: "+familyId+"\nنقش: "+(subscription.role==="owner"?"والد اصلی":"والد دوم");
     renderDevices(data.devices);
-    say("اتصال به پنل خانواده برقرار شد.");
-  } catch(e) { parentToken=""; say("ورود ناموفق: "+e.message); }
+    saveSession();
+    say("اتصال به پنل خانواده برقرار شد. ورود شما روی همین دستگاه ذخیره شد.");
+    startAutoRefresh();
+  } catch(e) {
+    const message=e.message||"خطای نامشخص";
+    if (/401|403|unauthorized|forbidden|token|parent/i.test(message)) {
+      parentToken="";
+      localStorage.removeItem(STORAGE_KEY);
+      say("کلید والد معتبر نیست یا دسترسی آن لغو شده است؛ دوباره با کلید معتبر وارد شوید.");
+    } else { say("ارتباط برقرار نشد: "+message+" — کلید ذخیره‌شده حذف نشده است؛ اتصال را دوباره امتحان کنید."); }
+  }
 };
 $("parentInvite").onclick = async () => {
   try {
@@ -151,6 +250,20 @@ async function refreshDevices() {
   const data = await call("/v1/family/devices");
   renderDevices(data.devices);
 }
+let autoRefreshTimer = null;
+function startAutoRefresh() {
+  if (autoRefreshTimer !== null) return;
+  autoRefreshTimer = window.setInterval(async () => {
+    if (!parentToken || document.visibilityState !== "visible") return;
+    try { await refreshDevices(); }
+    catch (e) { say("به‌روزرسانی خودکار انجام نشد؛ اتصال را بررسی کنید. " + (e.message || "")); }
+  }, 20000);
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && parentToken) {
+    refreshDevices().catch(e => say("به‌روزرسانی موقعیت ناموفق: " + (e.message || "")));
+  }
+});
 function renderDevices(devices) {
   const host=$("devices");
   if(!devices.length){host.textContent="هنوز عضوی متصل نشده است.";return;}
@@ -208,5 +321,49 @@ function renderDevices(devices) {
   });
 }
 $("refresh").onclick=async()=>{try{await refreshDevices();say("فهرست اعضا به‌روزرسانی شد.");}catch(e){say("خطا در دریافت اعضا: "+e.message);}};
+$("logout").onclick=()=>{
+  parentToken=""; familyId="";
+  $("token").value="";
+  $("rememberLogin").checked=false;
+  localStorage.removeItem(STORAGE_KEY);
+  $("familyCard").classList.add("hidden");
+  $("createCard").classList.remove("hidden");
+  $("devices").textContent="برای مشاهده اعضا دوباره وارد شوید.";
+  say("از پنل خارج شدید و کلید ذخیره‌شده از این مرورگر پاک شد.");
+};
+if (parentToken) $("connect").click();
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", async () => {
+    try {
+      const registration = await navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" });
+      registration.update().catch(() => {});
+    } catch (_) {}
+  });
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    // When a newly installed worker takes control, reload once to serve the new dashboard shell.
+    window.location.reload();
+  });
+}
+let sahroudInstallPrompt = null;
+window.addEventListener("beforeinstallprompt", event => {
+  event.preventDefault();
+  sahroudInstallPrompt = event;
+  const button = document.getElementById("installPanel");
+  if (button) button.classList.remove("hidden");
+});
+window.addEventListener("appinstalled", () => {
+  const button = document.getElementById("installPanel");
+  if (button) button.classList.add("hidden");
+});
+function installSahroudPanel() {
+  if (!sahroudInstallPrompt) {
+    alert("برای نصب، از منوی Chrome گزینه «Install app» یا «افزودن به صفحه اصلی» را انتخاب کنید.");
+    return;
+  }
+  sahroudInstallPrompt.prompt();
+  sahroudInstallPrompt.userChoice.finally(() => { sahroudInstallPrompt = null; });
+}
 </script>
 </body></html>

@@ -10,11 +10,16 @@ import android.content.IntentFilter
 import android.os.Build
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.content.res.ColorStateList
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.location.Location
+import android.location.LocationManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.widget.Button
 import android.widget.EditText
@@ -38,10 +43,12 @@ class MainActivity : Activity() {
     private lateinit var healthText: TextView
     private lateinit var waterText: TextView
     private lateinit var reportText: TextView
+    private lateinit var familyStatusText: TextView
     private var totalDistance = 0f
     private var routePoints = mutableListOf<String>()
     private var todaySteps = 0
     private var waterGlasses = 0
+    private var pendingTrackingAfterLocationSettings = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,34 +60,53 @@ class MainActivity : Activity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(22, 24, 22, 28)
-            setBackgroundColor(Color.rgb(245, 248, 252))
+            setPadding(16, 18, 16, 28)
+            setBackgroundColor(Color.rgb(239, 245, 249))
         }
         fun heading(text: String): TextView = TextView(this).apply {
             this.text = text
-            textSize = 19f
-            setTextColor(Color.rgb(20, 65, 105))
-            setPadding(0, 22, 0, 8)
+            textSize = 17f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setTextColor(Color.rgb(17, 66, 94))
+            setPadding(15, 17, 15, 13)
+            background = GradientDrawable().apply {
+                setColor(Color.WHITE)
+                cornerRadius = 22f
+                setStroke(1, Color.rgb(222, 233, 240))
+            }
         }
         fun body(text: String): TextView = TextView(this).apply {
             this.text = text
-            textSize = 15f
-            setTextColor(Color.DKGRAY)
-            setPadding(0, 6, 0, 10)
+            textSize = 14f
+            setTextColor(Color.rgb(48, 69, 84))
+            setPadding(12, 9, 12, 11)
+            setLineSpacing(3f, 1f)
         }
         fun action(text: String, click: () -> Unit) = Button(this).apply {
             this.text = text
+            isAllCaps = false
+            textSize = 14f
+            minHeight = 52
+            setTextColor(Color.WHITE)
+            backgroundTintList = ColorStateList.valueOf(Color.rgb(20, 105, 133))
+            setPadding(14, 8, 14, 8)
             setOnClickListener { click() }
         }
 
         root.addView(TextView(this).apply {
             text = "SAHROUD FAMILY GUARD & HEALTH"
-            textSize = 21f
-            setTextColor(Color.rgb(16, 76, 120))
+            textSize = 20f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-            setPadding(0, 8, 0, 14)
+            setPadding(16, 24, 16, 10)
+            background = GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(Color.rgb(16, 54, 83), Color.rgb(18, 119, 132))
+            ).apply { cornerRadius = 26f }
         })
-        root.addView(body("موقعیت، مسیر، گام‌شمار و پایش عادت‌های سلامت در یک برنامه"))
+        root.addView(body("موقعیت و مسیر با رضایت صاحب گوشی | گام‌شمار و اطلاعات سلامت فقط روی همین گوشی"))
+        root.addView(action("بررسی به‌روزرسانی برنامه") { checkForUpdates(true) })
         root.addView(heading("۱) موقعیت و ثبت مسیر"))
         statusText = body("ثبت موقعیت خاموش است. با آگاهی و اجازه خودتان شروع کنید.")
         locationText = body("هنوز موقعیتی ثبت نشده است.")
@@ -89,16 +115,19 @@ class MainActivity : Activity() {
         root.addView(locationText)
         root.addView(distanceText)
         root.addView(action("شروع ثبت مسیر در پس‌زمینه") { startTracking() })
-        root.addView(action("توقف ثبت موقعیت") { stopTracking() })
+        root.addView(action("اشتراک‌گذاری خودکار موقعیت بدون ثبت مسیر") { startAutoSharing() })
+        root.addView(action("توقف ثبت موقعیت و اشتراک‌گذاری") { stopTracking() })
         root.addView(body("هنگام ثبت پس‌زمینه، اعلان دائمی و قابل مشاهده نمایش داده می‌شود؛ هر زمان می‌توانید آن را متوقف کنید."))
         root.addView(action("نمایش آخرین موقعیت روی نقشه") { openLastLocation() })
         root.addView(action("پاک کردن مسیر و مسافت این نوبت") { clearRoute() })
 
         root.addView(heading("اتصال به خانواده و اشتراک‌گذاری موقعیت"))
-        root.addView(body("اتصال فقط با کد دعوت والد و تأیید آگاهانه صاحب همین گوشی انجام می‌شود. پس از اتصال، ارسال موقعیت فقط هنگام فعال بودن ثبت مسیر و نمایش اعلان انجام می‌شود."))
+        root.addView(body("اتصال فقط با کد دعوت والد و تأیید آگاهانه صاحب همین گوشی انجام می‌شود. اشتراک‌گذاری خودکار نیز جداگانه و با تأیید صاحب گوشی فعال می‌شود؛ اعلان دائمی وضعیت آن را نشان می‌دهد و هر زمان قابل توقف است."))
         root.addView(action("اتصال این گوشی به خانواده با کد دعوت") { pairDevice() })
         root.addView(action("قطع اشتراک‌گذاری و خروج از خانواده") { stopFamilySharing() })
-        root.addView(body("وضعیت اتصال: ${if (DeviceCredentials.get(this).getString("device_token", null).isNullOrBlank()) "متصل نیست" else "دارای کلید اتصال"}"))
+        familyStatusText = body("")
+        root.addView(familyStatusText)
+        refreshFamilyStatus()
 
         root.addView(heading("۲) گام‌شمار و فعالیت روزانه"))
         stepsText = body("در حال آماده‌سازی حسگر گام‌شمار…")
@@ -129,17 +158,75 @@ class MainActivity : Activity() {
         reportText = body("گزارش فعالیت هنوز آماده نیست.")
         root.addView(reportText)
         root.addView(action("به‌روزرسانی گزارش هفتگی") { refreshWeeklyReport() })
-        root.addView(body("گام‌ها، مسافت GPS و آب مصرفی به‌صورت محلی روی همین گوشی ذخیره می‌شوند. این نسخه هنوز به سرور مرکزی یا گوشی اعضای خانواده ارسال نمی‌کند."))
+        root.addView(body("گام‌شمار و اطلاعات سلامت فقط روی همین گوشی ذخیره می‌شوند و برای والد ارسال نمی‌شوند. موقعیت GPS پس از اتصال با دعوت و رضایت صاحب گوشی، فقط در حالت ثبت مسیر یا اشتراک‌گذاری خودکارِ جداگانه و با اعلان دائمی به پنل خانواده ارسال می‌شود."))
         root.addView(body("هشدار: این برنامه ابزار تشخیص یا درمان پزشکی نیست. فشارخون و ضربان قلب را باید با دستگاه معتبر اندازه‌گیری و سپس دستی ثبت کنید."))
         setContentView(ScrollView(this).apply { addView(root) })
         refreshHealth()
         refreshStepsText()
         restoreRouteDisplay()
+        checkForUpdates(false)
+    }
+
+
+    // Offers official releases. Installing over the existing package preserves
+    // local data; the user confirms the release page and Android installer.
+    private fun checkForUpdates(showUpToDate: Boolean) {
+        Thread {
+            try {
+                val connection = java.net.URL("https://api.github.com/repos/sahroud/danky/releases/latest")
+                    .openConnection() as java.net.HttpURLConnection
+                connection.connectTimeout = 8000
+                connection.readTimeout = 8000
+                connection.setRequestProperty("Accept", "application/vnd.github+json")
+                connection.setRequestProperty("User-Agent", "SAHROUD-FAMILY-GUARD")
+                val code = connection.responseCode
+                if (code !in 200..299) throw IllegalStateException("HTTP $code")
+                val json = org.json.JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
+                connection.disconnect()
+                val tag = json.optString("tag_name", "")
+                val releaseUrl = json.optString("html_url", "https://github.com/sahroud/danky/releases")
+                val latest = Regex("(\\d+)\\.(\\d+)\\.(\\d+)").find(tag)?.groupValues?.drop(1)?.map { it.toInt() }
+                    ?: return@Thread
+                @Suppress("DEPRECATION")
+                val currentName = packageManager.getPackageInfo(packageName, 0).versionName ?: "0.0.0"
+                val current = Regex("(\\d+)\\.(\\d+)\\.(\\d+)").find(currentName)?.groupValues?.drop(1)?.map { it.toInt() }
+                    ?: listOf(0, 0, 0)
+                val newer = (0..2).firstNotNullOfOrNull { i ->
+                    when {
+                        latest[i] > current.getOrElse(i) { 0 } -> true
+                        latest[i] < current.getOrElse(i) { 0 } -> false
+                        else -> null
+                    }
+                } ?: false
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    if (newer) {
+                        AlertDialog.Builder(this)
+                            .setTitle("نسخه جدید برنامه آماده است")
+                            .setMessage("نسخه $tag منتشر شده است. صفحه دریافت رسمی باز شود؟\\n\\nبرای حفظ اطلاعات، برنامه قبلی را حذف نکنید؛ نسخه جدید را روی همان برنامه نصب کنید.")
+                            .setNegativeButton("بعداً", null)
+                            .setPositiveButton("مشاهده و دریافت") { _, _ ->
+                                try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(releaseUrl))) }
+                                catch (_: Exception) { Toast.makeText(this, "بازکردن صفحه دریافت ممکن نشد.", Toast.LENGTH_LONG).show() }
+                            }.show()
+                    } else if (showUpToDate) {
+                        Toast.makeText(this, "برنامه به‌روز است.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (_: Exception) {
+                if (showUpToDate) runOnUiThread {
+                    Toast.makeText(this, "بررسی نسخه ممکن نشد؛ اتصال اینترنت را بررسی کنید.", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
     }
 
     private val locationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == LocationTrackingService.ACTION_LOCATION_UPDATE) restoreRouteDisplay()
+            if (intent?.action == LocationTrackingService.ACTION_LOCATION_UPDATE) {
+                restoreRouteDisplay()
+                refreshFamilyStatus()
+            }
             if (intent?.action == StepCounterService.ACTION_STEPS_UPDATE) refreshStepsText()
         }
     }
@@ -153,7 +240,11 @@ class MainActivity : Activity() {
         totalDistance = prefs.getFloat("route_distance", totalDistance)
         routePoints = prefs.getString("route_points", "").orEmpty().split("|").filter { it.isNotBlank() }.toMutableList()
         distanceText.text = "مسافت ثبت‌شده: ${formatDistance(totalDistance)} | نقاط مسیر: ${routePoints.size}"
-        statusText.text = if (prefs.getBoolean("tracking_active", false)) "ثبت مسیر پس‌زمینه فعال است؛ اعلان برنامه باید قابل مشاهده باشد." else "ثبت موقعیت متوقف است."
+        statusText.text = when {
+            prefs.getBoolean("tracking_active", false) -> "ثبت مسیر پس‌زمینه فعال است؛ اعلان برنامه باید قابل مشاهده باشد."
+            prefs.getBoolean("auto_share_active", false) -> "اشتراک‌گذاری خودکار موقعیت فعال است؛ ثبت مسیر انجام نمی‌شود."
+            else -> "ثبت موقعیت متوقف است."
+        }
     }
 
 
@@ -210,6 +301,7 @@ class MainActivity : Activity() {
                             .apply()
                         runOnUiThread {
                             Toast.makeText(this, "این گوشی با رضایت شما به خانواده متصل شد.", Toast.LENGTH_LONG).show()
+                            refreshFamilyStatus()
                             restoreRouteDisplay()
                         }
                         connection.disconnect()
@@ -220,13 +312,40 @@ class MainActivity : Activity() {
             }.show()
     }
 
+    private fun refreshFamilyStatus() {
+        if (!::familyStatusText.isInitialized) return
+        val secure = DeviceCredentials.get(this)
+        val connected = !secure.getString("device_token", null).isNullOrBlank()
+        val uploadError = prefs.getString("family_upload_error", null)
+        val lastUpload = prefs.getString("family_last_upload", null)
+        val tracking = prefs.getBoolean("tracking_active", false)
+        val autoSharing = prefs.getBoolean("auto_share_active", false)
+        familyStatusText.text = if (connected) {
+            buildString {
+                append("وضعیت اتصال: متصل به خانواده")
+                append(when {
+                    tracking -> "\\nثبت مسیر روشن است؛ ارسال موقعیت فعال است."
+                    autoSharing -> "\\nاشتراک‌گذاری خودکار روشن است؛ ثبت مسیر خاموش است."
+                    else -> "\\nاشتراک‌گذاری موقعیت متوقف است."
+                })
+                if (!lastUpload.isNullOrBlank()) append("\\nآخرین ارسال موفق: $lastUpload")
+                if (!uploadError.isNullOrBlank()) append("\\nآخرین خطای ارسال: $uploadError")
+            }
+        } else {
+            "وضعیت اتصال: متصل نیست"
+        }
+    }
+
     private fun stopFamilySharing() {
+        // Stop local collection immediately, even if the network is unavailable.
+        stopTracking()
         val secure = DeviceCredentials.get(this)
         val token = secure.getString("device_token", null)
         val api = prefs.getString("family_api_url", null)
         if (token.isNullOrBlank() || api.isNullOrBlank()) {
             secure.edit().clear().apply()
-            Toast.makeText(this, "اتصال خانوادگی روی این گوشی وجود نداشت.", Toast.LENGTH_SHORT).show()
+            refreshFamilyStatus()
+            Toast.makeText(this, "اشتراک‌گذاری محلی متوقف شد؛ اتصال فعالی برای لغو در سرور پیدا نشد.", Toast.LENGTH_SHORT).show()
             return
         }
         Thread {
@@ -242,7 +361,10 @@ class MainActivity : Activity() {
                 if (connection.responseCode !in 200..299) throw IllegalStateException("HTTP ${connection.responseCode}")
                 connection.disconnect()
                 secure.edit().clear().apply()
-                runOnUiThread { Toast.makeText(this, "اشتراک‌گذاری در سرور متوقف و کلید این گوشی پاک شد.", Toast.LENGTH_LONG).show() }
+                runOnUiThread {
+                    refreshFamilyStatus()
+                    Toast.makeText(this, "اشتراک‌گذاری در سرور متوقف و کلید این گوشی پاک شد.", Toast.LENGTH_LONG).show()
+                }
             } catch (e: Exception) {
                 runOnUiThread { Toast.makeText(this, "توقف در سرور انجام نشد: ${e.message}", Toast.LENGTH_LONG).show() }
             }
@@ -251,7 +373,50 @@ class MainActivity : Activity() {
 
     private fun dayKey(): String = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
 
+    private fun isDeviceLocationEnabled(): Boolean {
+        val manager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return try {
+            if (Build.VERSION.SDK_INT >= 28) manager.isLocationEnabled
+            else manager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun requestDeviceLocationEnabled() {
+        AlertDialog.Builder(this)
+            .setTitle("روشن کردن مکان گوشی")
+            .setMessage("برای ثبت و نمایش مسیر، ابتدا مکان (Location/GPS) گوشی را روشن کنید. با انتخاب «رفتن به تنظیمات»، صفحه تنظیم مکان باز می‌شود. پس از روشن کردن مکان و بازگشت به برنامه، وضعیت دوباره بررسی خواهد شد.")
+            .setNegativeButton("فعلاً نه") { _, _ ->
+                pendingTrackingAfterLocationSettings = false
+                statusText.text = "مکان گوشی خاموش است؛ ثبت مسیر شروع نشد."
+            }
+            .setPositiveButton("رفتن به تنظیمات") { _, _ ->
+                pendingTrackingAfterLocationSettings = true
+                try {
+                    startActivity(Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                } catch (e: Exception) {
+                    pendingTrackingAfterLocationSettings = false
+                    statusText.text = "باز کردن تنظیمات مکان ناموفق بود: ${e.localizedMessage ?: "خطای نامشخص"}"
+                }
+            }
+            .show()
+    }
+
     private fun startTracking() {
+        // Require system Location to be enabled before asking for permissions or starting the service.
+        if (!isDeviceLocationEnabled()) {
+            requestDeviceLocationEnabled()
+            return
+        }
+        pendingTrackingAfterLocationSettings = false
+        // Keep foreground location sharing visibly disclosed on Android 13+.
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 44)
+            return
+        }
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
             checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 41)
@@ -266,10 +431,51 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun startAutoSharing() {
+        val token = DeviceCredentials.get(this).getString("device_token", null)
+        if (token.isNullOrBlank()) {
+            Toast.makeText(this, "ابتدا این گوشی را با کد دعوت و رضایت صاحب گوشی به خانواده متصل کنید.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!isDeviceLocationEnabled()) {
+            Toast.makeText(this, "ابتدا مکان گوشی را از تنظیمات روشن کنید.", Toast.LENGTH_LONG).show()
+            try { startActivity(Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)) } catch (_: Exception) {}
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 45)
+            return
+        }
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+            checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 46)
+            return
+        }
+        showAutoSharingConsent()
+    }
+
+    private fun showAutoSharingConsent() {
+        AlertDialog.Builder(this)
+            .setTitle("فعال‌سازی اشتراک‌گذاری خودکار")
+            .setMessage("با تأیید شما، موقعیت این گوشی حتی بدون شروع ثبت مسیر، تقریباً هر ۱۵ دقیقه و در صورت جابه‌جایی قابل‌توجه برای پنل والد ارسال می‌شود. هنگام فعال بودن، اعلان دائمی نمایش داده می‌شود. هر زمان می‌توانید از همین صفحه یا اعلان، اشتراک‌گذاری را متوقف کنید. اگر گوشی خاموش یا آفلاین باشد، آخرین موقعیت قدیمی می‌ماند.")
+            .setNegativeButton("انصراف", null)
+            .setPositiveButton("تأیید و شروع") { _, _ ->
+                try {
+                    val intent = Intent(this, LocationTrackingService::class.java)
+                        .setAction(LocationTrackingService.ACTION_AUTO_START)
+                    if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent) else startService(intent)
+                    statusText.text = "درخواست شروع اشتراک‌گذاری خودکار موقعیت ارسال شد."
+                } catch (e: Exception) {
+                    statusText.text = "شروع اشتراک‌گذاری ناموفق بود: ${e.localizedMessage ?: "خطای نامشخص"}"
+                }
+            }.show()
+    }
+
     private fun stopTracking() {
         try { startService(Intent(this, LocationTrackingService::class.java).setAction(LocationTrackingService.ACTION_STOP)) } catch (_: Exception) {}
-        prefs.edit().putBoolean("tracking_active", false).apply()
-        statusText.text = "درخواست توقف ثبت مسیر ارسال شد."
+        prefs.edit().putBoolean("tracking_active", false).putBoolean("auto_share_active", false).apply()
+        statusText.text = "درخواست توقف ثبت موقعیت و اشتراک‌گذاری ارسال شد."
     }
 
     private fun formatDistance(m: Float): String =
@@ -290,7 +496,8 @@ class MainActivity : Activity() {
         stopTracking()
         totalDistance = 0f
         routePoints.clear()
-        prefs.edit().putFloat("route_distance", 0f).putString("route_points", "").apply()
+        prefs.edit().putFloat("route_distance", 0f).putString("route_points", "")
+            .remove("last_lat").remove("last_lon").remove("last_location_time").apply()
         distanceText.text = "مسافت این نوبت: ۰ متر | نقاط مسیر: ۰"
         locationText.text = "مسیر پاک شد."
     }
@@ -409,6 +616,21 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 44 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            startTracking()
+        } else if (requestCode == 44) {
+            statusText.text = "برای نمایش اعلان دائمی، مجوز اعلان لازم است؛ ثبت مسیر شروع نشد."
+        }
+        if (requestCode == 45 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            startAutoSharing()
+        } else if (requestCode == 45) {
+            Toast.makeText(this, "برای اشتراک‌گذاری آشکار، مجوز اعلان لازم است.", Toast.LENGTH_LONG).show()
+        }
+        if (requestCode == 46 && grantResults.any { it == PackageManager.PERMISSION_GRANTED }) {
+            showAutoSharingConsent()
+        } else if (requestCode == 46) {
+            Toast.makeText(this, "مجوز مکان داده نشد؛ اشتراک‌گذاری شروع نشد.", Toast.LENGTH_LONG).show()
+        }
         if (requestCode == 41 && grantResults.any { it == PackageManager.PERMISSION_GRANTED }) {
             startTracking()
         } else if (requestCode == 41) {
@@ -429,7 +651,16 @@ class MainActivity : Activity() {
             else registerReceiver(locationReceiver, filter)
         } catch (_: Exception) {}
         restoreRouteDisplay()
+        refreshFamilyStatus()
         refreshStepsText()
+        if (pendingTrackingAfterLocationSettings) {
+            if (isDeviceLocationEnabled()) {
+                pendingTrackingAfterLocationSettings = false
+                startTracking()
+            } else {
+                statusText.text = "مکان گوشی هنوز خاموش است؛ برای شروع ثبت مسیر، مکان را روشن کنید."
+            }
+        }
     }
 
     override fun onPause() {

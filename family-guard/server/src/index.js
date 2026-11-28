@@ -50,7 +50,7 @@ async function deviceAuth(request, env) {
   ).bind(await hash(token)).first();
 }
 
-async function handle(request, env) {
+export async function handle(request, env) {
   const url = new URL(request.url);
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders(request, env) });
@@ -58,7 +58,48 @@ async function handle(request, env) {
 
   let response;
   if (url.pathname === "/health" && request.method === "GET") {
-    response = json({ service: "SAHROUD FAMILY GUARD API", status: "ok" });
+    try {
+      // Read-only connectivity check: verifies the D1 binding without changing data.
+      await env.DB.prepare("SELECT 1 AS ok").first();
+      response = json({ service: "SAHROUD FAMILY GUARD API", status: "ok", database: "ok" });
+    } catch {
+      response = json({ service: "SAHROUD FAMILY GUARD API", status: "degraded", database: "unavailable" }, 503);
+    }
+  } else if (url.pathname === "/v1/owner/recover" && request.method === "POST") {
+    // Recovery is deliberately gated by a high-entropy secret configured only in
+    // the Cloudflare Worker secret store. It never returns or changes family/device data.
+    const configuredKey = String(env.PARENT_RECOVERY_KEY || "");
+    const suppliedKey = request.headers.get("x-parent-recovery-key") || "";
+    let mismatch = configuredKey.length ^ suppliedKey.length;
+    const compareLength = Math.max(configuredKey.length, suppliedKey.length);
+    for (let i = 0; i < compareLength; i++) {
+      mismatch |= (configuredKey.charCodeAt(i) || 0) ^ (suppliedKey.charCodeAt(i) || 0);
+    }
+    if (configuredKey.length < 32 || mismatch !== 0) {
+      response = json({ error: "recovery_not_authorized" }, 401);
+    } else {
+      const owners = await env.DB.prepare(
+        "SELECT id AS member_id, family_id FROM family_members WHERE role = 'owner' AND status = 'active' LIMIT 2"
+      ).all();
+      const rows = owners.results || [];
+      if (rows.length !== 1) {
+        response = json({ error: "recovery_requires_exactly_one_active_owner" }, 409);
+      } else {
+        const newToken = randomToken();
+        const tokenHash = await hash(newToken);
+        const timestamp = now();
+        await env.DB.batch([
+          env.DB.prepare("UPDATE family_members SET token_hash = ? WHERE id = ? AND role = 'owner' AND status = 'active'")
+            .bind(tokenHash, rows[0].member_id),
+          env.DB.prepare("UPDATE families SET parent_token_hash = ? WHERE id = ?")
+            .bind(tokenHash, rows[0].family_id)
+        ]);
+        response = json({
+          parent_token: newToken,
+          message: "کلید والد تعویض شد. کلید قبلی دیگر معتبر نیست؛ کلید جدید را محرمانه نگه دارید."
+        });
+      }
+    }
   } else if (url.pathname === "/v1/families" && request.method === "POST") {
     const input = await body(request);
     const label = String(input?.parent_label || "").trim().slice(0, 80);
@@ -91,7 +132,7 @@ async function handle(request, env) {
       ).bind(family.id).first();
       if (existingParent) response = json({ error: "second_parent_already_exists" }, 409);
       else {
-      const code = randomToken(4).toUpperCase();
+      const code = randomToken(8).toUpperCase();
       const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
       await env.DB.prepare(
         "INSERT INTO parent_invites (code_hash, family_id, expires_at, created_at) VALUES (?, ?, ?, ?)"
@@ -155,7 +196,7 @@ async function handle(request, env) {
     else if (!ownerOnly(family)) response = json({ error: "owner_required" }, 403);
     else if (!paidParentActive(family)) response = json({ error: "subscription_inactive", subscription_required: true }, 402);
     else {
-      const code = randomToken(4).toUpperCase();
+      const code = randomToken(8).toUpperCase();
       const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
       await env.DB.prepare(
         "INSERT INTO invites (code_hash, family_id, expires_at, created_at) VALUES (?, ?, ?, ?)"
@@ -200,18 +241,20 @@ async function handle(request, env) {
   } else if (url.pathname === "/v1/location" && request.method === "POST") {
     const device = await deviceAuth(request, env);
     const input = await body(request);
-    const lat = Number(input?.latitude);
-    const lon = Number(input?.longitude);
-    const accuracy = input?.accuracy_m == null ? null : Number(input.accuracy_m);
+    const lat = input?.latitude;
+    const lon = input?.longitude;
+    const accuracy = input?.accuracy_m == null ? null : input.accuracy_m;
     if (!device) response = json({ error: "unauthorized" }, 401);
     else if (!device.sharing_enabled) response = json({ error: "sharing_disabled" }, 403);
-    else if (!Number.isFinite(lat) || lat < -90 || lat > 90 ||
-             !Number.isFinite(lon) || lon < -180 || lon > 180 ||
-             (accuracy !== null && (!Number.isFinite(accuracy) || accuracy < 0))) {
+    else if (typeof lat !== "number" || !Number.isFinite(lat) || lat < -90 || lat > 90 ||
+             typeof lon !== "number" || !Number.isFinite(lon) || lon < -180 || lon > 180 ||
+             (accuracy !== null && (typeof accuracy !== "number" || !Number.isFinite(accuracy) || accuracy < 0 || accuracy > 10000))) {
       response = json({ error: "invalid_coordinates_or_accuracy" }, 400);
     } else {
-      const recordedAt = input?.recorded_at && !Number.isNaN(Date.parse(input.recorded_at))
-        ? new Date(input.recorded_at).toISOString() : now();
+      const requestedRecordedAt = input?.recorded_at ? Date.parse(input.recorded_at) : NaN;
+      // Do not let a device submit a far-future timestamp and pin the family map to it.
+      const recordedAt = Number.isFinite(requestedRecordedAt) && requestedRecordedAt <= Date.now() + 5 * 60 * 1000
+        ? new Date(requestedRecordedAt).toISOString() : now();
       await env.DB.batch([
         env.DB.prepare(
           "INSERT INTO locations (device_id, latitude, longitude, accuracy_m, recorded_at, received_at) VALUES (?, ?, ?, ?, ?, ?)"
@@ -291,7 +334,7 @@ function corsHeaders(request, env) {
   if (origin && allowed && origin === allowed) {
     headers["access-control-allow-origin"] = origin;
     headers["access-control-allow-methods"] = "GET, POST, OPTIONS";
-    headers["access-control-allow-headers"] = "Content-Type, Authorization";
+    headers["access-control-allow-headers"] = "Content-Type, Authorization, X-Parent-Recovery-Key";
   }
   return headers;
 }
