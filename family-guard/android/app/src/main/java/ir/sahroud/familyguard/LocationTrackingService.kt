@@ -26,15 +26,19 @@ import org.json.JSONObject
 class LocationTrackingService : Service(), LocationListener {
     companion object {
         const val ACTION_START = "ir.sahroud.familyguard.action.START_TRACKING"
+        const val ACTION_AUTO_START = "ir.sahroud.familyguard.action.AUTO_SHARE_START"
         const val ACTION_STOP = "ir.sahroud.familyguard.action.STOP_TRACKING"
         const val ACTION_LOCATION_UPDATE = "ir.sahroud.familyguard.action.LOCATION_UPDATE"
         private const val CHANNEL_ID = "visible_location_tracking"
         private const val NOTIFICATION_ID = 7101
+        private const val AUTO_INTERVAL_MS = 15 * 60 * 1000L
+        private const val AUTO_DISTANCE_M = 50f
     }
     private val prefs by lazy { getSharedPreferences("sahroud_health", Context.MODE_PRIVATE) }
     private lateinit var locationManager: LocationManager
     private var previous: Location? = null
     private var totalDistance = 0f
+    private var routeRecording = true
     private val routePoints = mutableListOf<String>()
     private val uploadExecutor = Executors.newSingleThreadExecutor()
 
@@ -49,7 +53,8 @@ class LocationTrackingService : Service(), LocationListener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> { stopTracking(); return START_NOT_STICKY }
-            ACTION_START, null -> startTracking()
+            ACTION_AUTO_START -> { routeRecording = false; startTracking() }
+            ACTION_START, null -> { routeRecording = true; startTracking() }
         }
         return START_NOT_STICKY
     }
@@ -63,11 +68,19 @@ class LocationTrackingService : Service(), LocationListener {
         else startForeground(NOTIFICATION_ID, notification)
         try {
             val provider = if (fine && locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) LocationManager.GPS_PROVIDER else LocationManager.NETWORK_PROVIDER
-            locationManager.requestLocationUpdates(provider, 5000L, 3f, this, Looper.getMainLooper())
+            val interval = if (routeRecording) 5000L else AUTO_INTERVAL_MS
+            val distance = if (routeRecording) 3f else AUTO_DISTANCE_M
+            locationManager.requestLocationUpdates(provider, interval, distance, this, Looper.getMainLooper())
             locationManager.getLastKnownLocation(provider)?.let { onLocationChanged(it) }
-            prefs.edit().putBoolean("tracking_active", true).apply()
+            prefs.edit()
+                .putBoolean("tracking_active", routeRecording)
+                .putBoolean("auto_share_active", !routeRecording)
+                .putBoolean("route_recording_active", routeRecording)
+                .apply()
         } catch (_: Exception) {
-            prefs.edit().putBoolean("tracking_active", false).apply()
+            prefs.edit().putBoolean("tracking_active", false)
+                .putBoolean("auto_share_active", false)
+                .putBoolean("route_recording_active", false).apply()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
@@ -76,19 +89,25 @@ class LocationTrackingService : Service(), LocationListener {
 
     override fun onLocationChanged(location: Location) {
         if (location.accuracy > 75f) return
-        previous?.let { old ->
-            val delta = old.distanceTo(location)
-            if (delta in 1f..500f) totalDistance += delta
+        if (routeRecording) {
+            previous?.let { old ->
+                val delta = old.distanceTo(location)
+                if (delta in 1f..500f) totalDistance += delta
+            }
+            previous = location
+            val point = "${location.latitude},${location.longitude}"
+            if (routePoints.isEmpty() || routePoints.last() != point) routePoints.add(point)
         }
-        previous = location
-        val point = "${location.latitude},${location.longitude}"
-        if (routePoints.isEmpty() || routePoints.last() != point) routePoints.add(point)
-        val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-        prefs.edit().putFloat("route_distance", totalDistance)
+        val time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date(location.time))
+        prefs.edit()
+            .putFloat("route_distance", totalDistance)
             .putString("route_points", routePoints.joinToString("|"))
             .putString("last_lat", location.latitude.toString())
             .putString("last_lon", location.longitude.toString())
-            .putString("last_location_time", time).putBoolean("tracking_active", true).apply()
+            .putString("last_location_time", time)
+            .putBoolean("tracking_active", routeRecording)
+            .putBoolean("auto_share_active", !routeRecording)
+            .apply()
         uploadLocation(location)
         sendBroadcast(Intent(ACTION_LOCATION_UPDATE).setPackage(packageName))
     }
@@ -132,7 +151,10 @@ class LocationTrackingService : Service(), LocationListener {
 
     private fun stopTracking() {
         try { locationManager.removeUpdates(this) } catch (_: Exception) {}
-        prefs.edit().putBoolean("tracking_active", false).putFloat("route_distance", totalDistance)
+        prefs.edit().putBoolean("tracking_active", false)
+            .putBoolean("auto_share_active", false)
+            .putBoolean("route_recording_active", false)
+            .putFloat("route_distance", totalDistance)
             .putString("route_points", routePoints.joinToString("|")).apply()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -142,7 +164,7 @@ class LocationTrackingService : Service(), LocationListener {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= 26) {
             val channel = NotificationChannel(CHANNEL_ID, "ثبت آشکار موقعیت", NotificationManager.IMPORTANCE_LOW)
-            channel.description = "اعلان دائمی هنگام ثبت مسیر توسط کاربر"
+            channel.description = "اعلان دائمی هنگام اشتراک‌گذاری آشکار موقعیت توسط کاربر"
             channel.setShowBadge(false)
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
@@ -153,19 +175,26 @@ class LocationTrackingService : Service(), LocationListener {
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0)
         val stopPending = PendingIntent.getService(this, 7102, stopIntent, flags)
         val openPending = PendingIntent.getActivity(this, 7103, Intent(this, MainActivity::class.java), flags)
+        val title = if (routeRecording) "ثبت مسیر فعال است" else "اشتراک‌گذاری خودکار موقعیت فعال است"
+        val message = if (routeRecording)
+            "موقعیت و مسیر ثبت و برای خانواده ارسال می‌شود."
+        else
+            "بدون ثبت مسیر، موقعیت تقریباً هر ۱۵ دقیقه ارسال می‌شود."
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-            .setContentTitle("SAHROUD FAMILY GUARD")
-            .setContentText("ثبت موقعیت و مسیر فعال است؛ برای توقف از دکمه زیر استفاده کنید.")
+            .setContentTitle("SAHROUD FAMILY GUARD - $title")
+            .setContentText(message)
             .setOngoing(true).setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setContentIntent(openPending)
-            .addAction(android.R.drawable.ic_media_pause, "توقف ثبت مسیر", stopPending).build()
+            .addAction(android.R.drawable.ic_media_pause, "توقف اشتراک‌گذاری", stopPending).build()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onDestroy() {
         try { locationManager.removeUpdates(this) } catch (_: Exception) {}
-        prefs.edit().putBoolean("tracking_active", false).apply()
+        prefs.edit().putBoolean("tracking_active", false)
+            .putBoolean("auto_share_active", false)
+            .putBoolean("route_recording_active", false).apply()
         try { uploadExecutor.shutdown() } catch (_: Exception) {}
         super.onDestroy()
     }
