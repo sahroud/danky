@@ -87,7 +87,7 @@ hr{border:0;border-top:1px solid #e6edf2;margin:20px 0}
 <section class="card">
 <h2>ورود والد / مدیر خانواده</h2>
 <label for="token">کلید محرمانه والد</label><input id="token" type="password" autocomplete="off" placeholder="کلید دریافتی هنگام ایجاد خانواده">
-<label><input id="rememberLogin" type="checkbox" style="width:auto"> ورود من روی همین دستگاه ذخیره شود (فقط روی دستگاه شخصی و امن)</label>
+<label><input id="rememberLogin" type="checkbox" style="width:auto" checked> ورود من روی همین دستگاه ذخیره شود (فقط روی دستگاه شخصی و امن؛ برای ماندن ورود پس از Refresh فعال باشد)</label>
 <button id="connect" class="secondary">اتصال به خانواده</button>
 <button id="logout" class="secondary">خروج و پاک‌کردن ورود ذخیره‌شده</button>
 <p class="muted">نشانی سرور ذخیره می‌شود. کلید والد فقط با انتخاب گزینهٔ بالا در حافظهٔ مرورگر این دستگاه ذخیره می‌شود؛ روی رایانهٔ عمومی این گزینه را فعال نکنید.</p>
@@ -198,8 +198,16 @@ $("connect").onclick = async () => {
     $("createCard").classList.add("hidden");
     $("familyInfo").textContent = "خانواده: "+data.family.parent_label+"\nشناسه: "+familyId+"\nنقش: "+(subscription.role==="owner"?"والد اصلی":"والد دوم");
     renderDevices(data.devices);
-    saveSession();\n    say("اتصال به پنل خانواده برقرار شد. ورود شما روی همین دستگاه ذخیره شد.");
-  } catch(e) {\n    const message=e.message||"خطای نامشخص";\n    if (/401|403|unauthorized|forbidden|token|parent/i.test(message)) {\n      parentToken="";\n      localStorage.removeItem(STORAGE_KEY);\n      say("کلید والد معتبر نیست یا دسترسی آن لغو شده است؛ دوباره با کلید معتبر وارد شوید.");\n    } else { say("ارتباط برقرار نشد: "+message+" — کلید ذخیره‌شده حذف نشده است؛ اتصال را دوباره امتحان کنید."); }\n  }
+    saveSession();
+    say("اتصال به پنل خانواده برقرار شد. ورود شما روی همین دستگاه ذخیره شد.");
+  } catch(e) {
+    const message=e.message||"خطای نامشخص";
+    if (/401|403|unauthorized|forbidden|token|parent/i.test(message)) {
+      parentToken="";
+      localStorage.removeItem(STORAGE_KEY);
+      say("کلید والد معتبر نیست یا دسترسی آن لغو شده است؛ دوباره با کلید معتبر وارد شوید.");
+    } else { say("ارتباط برقرار نشد: "+message+" — کلید ذخیره‌شده حذف نشده است؛ اتصال را دوباره امتحان کنید."); }
+  }
 };
 $("parentInvite").onclick = async () => {
   try {
