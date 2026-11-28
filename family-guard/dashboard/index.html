@@ -200,6 +200,7 @@ $("connect").onclick = async () => {
     renderDevices(data.devices);
     saveSession();
     say("اتصال به پنل خانواده برقرار شد. ورود شما روی همین دستگاه ذخیره شد.");
+    startAutoRefresh();
   } catch(e) {
     const message=e.message||"خطای نامشخص";
     if (/401|403|unauthorized|forbidden|token|parent/i.test(message)) {
@@ -249,6 +250,20 @@ async function refreshDevices() {
   const data = await call("/v1/family/devices");
   renderDevices(data.devices);
 }
+let autoRefreshTimer = null;
+function startAutoRefresh() {
+  if (autoRefreshTimer !== null) return;
+  autoRefreshTimer = window.setInterval(async () => {
+    if (!parentToken || document.visibilityState !== "visible") return;
+    try { await refreshDevices(); }
+    catch (e) { say("به‌روزرسانی خودکار انجام نشد؛ اتصال را بررسی کنید. " + (e.message || "")); }
+  }, 20000);
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && parentToken) {
+    refreshDevices().catch(e => say("به‌روزرسانی موقعیت ناموفق: " + (e.message || "")));
+  }
+});
 function renderDevices(devices) {
   const host=$("devices");
   if(!devices.length){host.textContent="هنوز عضوی متصل نشده است.";return;}
