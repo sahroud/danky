@@ -319,10 +319,15 @@ class MainActivity : Activity() {
         val uploadError = prefs.getString("family_upload_error", null)
         val lastUpload = prefs.getString("family_last_upload", null)
         val tracking = prefs.getBoolean("tracking_active", false)
+        val autoSharing = prefs.getBoolean("auto_share_active", false)
         familyStatusText.text = if (connected) {
             buildString {
                 append("وضعیت اتصال: متصل به خانواده")
-                append(if (tracking) "\\nثبت مسیر روشن است؛ ارسال موقعیت فعال است." else "\\nثبت مسیر خاموش است؛ موقعیتی ارسال نمی‌شود.")
+                append(when {
+                    tracking -> "\\nثبت مسیر روشن است؛ ارسال موقعیت فعال است."
+                    autoSharing -> "\\nاشتراک‌گذاری خودکار روشن است؛ ثبت مسیر خاموش است."
+                    else -> "\\nاشتراک‌گذاری موقعیت متوقف است."
+                })
                 if (!lastUpload.isNullOrBlank()) append("\\nآخرین ارسال موفق: $lastUpload")
                 if (!uploadError.isNullOrBlank()) append("\\nآخرین خطای ارسال: $uploadError")
             }
