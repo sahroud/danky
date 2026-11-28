@@ -115,13 +115,14 @@ class MainActivity : Activity() {
         root.addView(locationText)
         root.addView(distanceText)
         root.addView(action("شروع ثبت مسیر در پس‌زمینه") { startTracking() })
-        root.addView(action("توقف ثبت موقعیت") { stopTracking() })
+        root.addView(action("اشتراک‌گذاری خودکار موقعیت بدون ثبت مسیر") { startAutoSharing() })
+        root.addView(action("توقف ثبت موقعیت و اشتراک‌گذاری") { stopTracking() })
         root.addView(body("هنگام ثبت پس‌زمینه، اعلان دائمی و قابل مشاهده نمایش داده می‌شود؛ هر زمان می‌توانید آن را متوقف کنید."))
         root.addView(action("نمایش آخرین موقعیت روی نقشه") { openLastLocation() })
         root.addView(action("پاک کردن مسیر و مسافت این نوبت") { clearRoute() })
 
         root.addView(heading("اتصال به خانواده و اشتراک‌گذاری موقعیت"))
-        root.addView(body("اتصال فقط با کد دعوت والد و تأیید آگاهانه صاحب همین گوشی انجام می‌شود. پس از اتصال، ارسال موقعیت فقط هنگام فعال بودن ثبت مسیر و نمایش اعلان انجام می‌شود."))
+        root.addView(body("اتصال فقط با کد دعوت والد و تأیید آگاهانه صاحب همین گوشی انجام می‌شود. اشتراک‌گذاری خودکار نیز جداگانه و با تأیید صاحب گوشی فعال می‌شود؛ اعلان دائمی وضعیت آن را نشان می‌دهد و هر زمان قابل توقف است."))
         root.addView(action("اتصال این گوشی به خانواده با کد دعوت") { pairDevice() })
         root.addView(action("قطع اشتراک‌گذاری و خروج از خانواده") { stopFamilySharing() })
         familyStatusText = body("")
@@ -157,7 +158,7 @@ class MainActivity : Activity() {
         reportText = body("گزارش فعالیت هنوز آماده نیست.")
         root.addView(reportText)
         root.addView(action("به‌روزرسانی گزارش هفتگی") { refreshWeeklyReport() })
-        root.addView(body("گام‌شمار و اطلاعات سلامت فقط روی همین گوشی ذخیره می‌شوند و برای والد ارسال نمی‌شوند. موقعیت GPS فقط پس از اتصال با دعوت و رضایت صاحب گوشی، و فقط هنگام روشن بودن ثبت مسیر، به پنل خانواده ارسال می‌شود."))
+        root.addView(body("گام‌شمار و اطلاعات سلامت فقط روی همین گوشی ذخیره می‌شوند و برای والد ارسال نمی‌شوند. موقعیت GPS پس از اتصال با دعوت و رضایت صاحب گوشی، فقط در حالت ثبت مسیر یا اشتراک‌گذاری خودکارِ جداگانه و با اعلان دائمی به پنل خانواده ارسال می‌شود."))
         root.addView(body("هشدار: این برنامه ابزار تشخیص یا درمان پزشکی نیست. فشارخون و ضربان قلب را باید با دستگاه معتبر اندازه‌گیری و سپس دستی ثبت کنید."))
         setContentView(ScrollView(this).apply { addView(root) })
         refreshHealth()
@@ -239,7 +240,11 @@ class MainActivity : Activity() {
         totalDistance = prefs.getFloat("route_distance", totalDistance)
         routePoints = prefs.getString("route_points", "").orEmpty().split("|").filter { it.isNotBlank() }.toMutableList()
         distanceText.text = "مسافت ثبت‌شده: ${formatDistance(totalDistance)} | نقاط مسیر: ${routePoints.size}"
-        statusText.text = if (prefs.getBoolean("tracking_active", false)) "ثبت مسیر پس‌زمینه فعال است؛ اعلان برنامه باید قابل مشاهده باشد." else "ثبت موقعیت متوقف است."
+        statusText.text = when {
+            prefs.getBoolean("tracking_active", false) -> "ثبت مسیر پس‌زمینه فعال است؛ اعلان برنامه باید قابل مشاهده باشد."
+            prefs.getBoolean("auto_share_active", false) -> "اشتراک‌گذاری خودکار موقعیت فعال است؛ ثبت مسیر انجام نمی‌شود."
+            else -> "ثبت موقعیت متوقف است."
+        }
     }
 
 
@@ -421,10 +426,51 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun startAutoSharing() {
+        val token = DeviceCredentials.get(this).getString("device_token", null)
+        if (token.isNullOrBlank()) {
+            Toast.makeText(this, "ابتدا این گوشی را با کد دعوت و رضایت صاحب گوشی به خانواده متصل کنید.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!isDeviceLocationEnabled()) {
+            Toast.makeText(this, "ابتدا مکان گوشی را از تنظیمات روشن کنید.", Toast.LENGTH_LONG).show()
+            try { startActivity(Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)) } catch (_: Exception) {}
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 45)
+            return
+        }
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+            checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 46)
+            return
+        }
+        showAutoSharingConsent()
+    }
+
+    private fun showAutoSharingConsent() {
+        AlertDialog.Builder(this)
+            .setTitle("فعال‌سازی اشتراک‌گذاری خودکار")
+            .setMessage("با تأیید شما، موقعیت این گوشی حتی بدون شروع ثبت مسیر، تقریباً هر ۱۵ دقیقه و در صورت جابه‌جایی قابل‌توجه برای پنل والد ارسال می‌شود. هنگام فعال بودن، اعلان دائمی نمایش داده می‌شود. هر زمان می‌توانید از همین صفحه یا اعلان، اشتراک‌گذاری را متوقف کنید. اگر گوشی خاموش یا آفلاین باشد، آخرین موقعیت قدیمی می‌ماند.")
+            .setNegativeButton("انصراف", null)
+            .setPositiveButton("تأیید و شروع") { _, _ ->
+                try {
+                    val intent = Intent(this, LocationTrackingService::class.java)
+                        .setAction(LocationTrackingService.ACTION_AUTO_START)
+                    if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent) else startService(intent)
+                    statusText.text = "درخواست شروع اشتراک‌گذاری خودکار موقعیت ارسال شد."
+                } catch (e: Exception) {
+                    statusText.text = "شروع اشتراک‌گذاری ناموفق بود: ${e.localizedMessage ?: "خطای نامشخص"}"
+                }
+            }.show()
+    }
+
     private fun stopTracking() {
         try { startService(Intent(this, LocationTrackingService::class.java).setAction(LocationTrackingService.ACTION_STOP)) } catch (_: Exception) {}
-        prefs.edit().putBoolean("tracking_active", false).apply()
-        statusText.text = "درخواست توقف ثبت مسیر ارسال شد."
+        prefs.edit().putBoolean("tracking_active", false).putBoolean("auto_share_active", false).apply()
+        statusText.text = "درخواست توقف ثبت موقعیت و اشتراک‌گذاری ارسال شد."
     }
 
     private fun formatDistance(m: Float): String =
@@ -569,6 +615,16 @@ class MainActivity : Activity() {
             startTracking()
         } else if (requestCode == 44) {
             statusText.text = "برای نمایش اعلان دائمی، مجوز اعلان لازم است؛ ثبت مسیر شروع نشد."
+        }
+        if (requestCode == 45 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            startAutoSharing()
+        } else if (requestCode == 45) {
+            Toast.makeText(this, "برای اشتراک‌گذاری آشکار، مجوز اعلان لازم است.", Toast.LENGTH_LONG).show()
+        }
+        if (requestCode == 46 && grantResults.any { it == PackageManager.PERMISSION_GRANTED }) {
+            showAutoSharingConsent()
+        } else if (requestCode == 46) {
+            Toast.makeText(this, "مجوز مکان داده نشد؛ اشتراک‌گذاری شروع نشد.", Toast.LENGTH_LONG).show()
         }
         if (requestCode == 41 && grantResults.any { it == PackageManager.PERMISSION_GRANTED }) {
             startTracking()
